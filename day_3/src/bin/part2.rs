@@ -101,10 +101,13 @@ impl Schematic {
         assert_eq!(ret.numbers.len(), ret.data.len());
         ret
     }
-    fn check_adj_line<'b>(sym: &Symbol, adj_line: Option<&'b Vec<Number>>) -> Option<&'b Number> {
+    fn check_adj_line(sym: &Symbol, adj_line: Option<&Vec<Number>>) -> Option<Vec<Number>> {
         if let Some(adj_line) = adj_line {
-            let iter = adj_line.iter().find(|num| sym.col >= max(0, (num.col_range.0 as i32)-1) as usize && sym.col <= num.col_range.1);
-            return iter;
+            let iter = adj_line.iter()
+                .filter(|num| sym.col >= max(0, (num.col_range.0 as i32)-1) as usize && sym.col <= num.col_range.1)
+                .map(|num| num.clone())
+                .collect();
+            return Some(iter);
         }
         None
     }
@@ -122,18 +125,18 @@ impl Schematic {
             if sym.line > 0 {
                 numbers_above = Some(&self.numbers[sym.line-1]);
             }
-            let num = Self::check_adj_line(sym, numbers_above);
-            if let Some(num) = num {
-                sym.numbers.as_mut().unwrap().push(num.clone());
+            let mut nums = Self::check_adj_line(sym, numbers_above);
+            if let Some(nums) = &mut nums {
+                sym.numbers.as_mut().unwrap().append(nums);
             }
             // Check below
             let mut numbers_below: Option<&Vec<Number>> = None;
             if sym.line < self.data.len()-1 {
                 numbers_below = Some(&self.numbers[sym.line+1]);
             }
-            let num = Self::check_adj_line(sym, numbers_below);
-            if let Some(num) = num {
-                sym.numbers.as_mut().unwrap().push(num.clone());
+            let mut nums = Self::check_adj_line(sym, numbers_below);
+            if let Some(nums) = &mut nums {
+                sym.numbers.as_mut().unwrap().append(nums);
             }
             if sym.numbers.as_mut().unwrap().len() != 2 {
                 println!("{:?}", sym.numbers.as_ref().unwrap());
@@ -171,6 +174,9 @@ fn main() {
     let data = include_str!("../../input.txt");
     let mut schem = Schematic::new(data.split('\n').map(|l| l.to_string()).collect());
     let gears = schem.find_gears();
+    for gear in gears.iter() {
+        println!("{:?}", gear.numbers.as_ref().unwrap());
+    }
     let sum = gears.iter().fold(0, |acc,x| acc+x.numbers.as_ref().unwrap().iter().fold(1, |acc,x| acc*x.value));
     println!("Sum = {}", sum);
     //schem.print();
