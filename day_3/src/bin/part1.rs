@@ -1,5 +1,8 @@
 use std::borrow::BorrowMut;
 use std::cmp::{max,min};
+use termion::{color, cursor};
+use termion::raw::IntoRawMode;
+use std::io::{stdout, Write};
 
 
 #[allow(dead_code)]
@@ -58,6 +61,16 @@ impl Schematic {
                     _ => {}
                 }
             }
+        }
+        match in_number {
+            true => {
+                if let Some(num) = &mut num {
+                    num.col_range.1 = s.len();
+                    num.value = buf.unwrap().parse().unwrap();
+                }
+                ret.push(num.unwrap());
+            },
+            _ => {}
         }
 
         ret
@@ -119,6 +132,25 @@ impl Schematic {
             .filter(|num| self.is_number_adjacent_to_symbol(num))
             .collect()
     }
+
+    pub fn print(&self) {
+        let mut stdout = stdout().into_raw_mode().unwrap();
+        for (idx,line) in self.data.iter().enumerate() {
+            for num in &self.numbers[idx] {
+                if self.is_number_adjacent_to_symbol(num) {
+                    print!("{}", color::Fg(color::Green));
+                } else {
+                    print!("{}", color::Fg(color::Red));
+                }
+                print!("{}{}", cursor::Goto(num.col_range.0 as u16, num.line as u16), num.value);
+            }
+            for symbol in &self.symbols[idx] {
+                print!("{}", color::Fg(color::Yellow));
+                print!("{}{}", cursor::Goto(symbol.col as u16, symbol.line as u16), self.data[symbol.line].chars().nth(symbol.col).unwrap());
+            }
+            println!();
+        }
+    }
 }
 
 
@@ -129,6 +161,9 @@ fn main() {
     for num in &rel_numbers {
         println!("{:?}", num);
     }
+    //schem.print();
+    println!("{:?}", schem.numbers[0]);
+    println!("Determined that {} numbers are relevant.", rel_numbers.len());
     println!("Sum = {}", rel_numbers.iter().fold(0, |acc,x| acc+x.value));
 }
 
@@ -141,5 +176,7 @@ mod tests {
         let data = include_str!("../../input2.txt");
         let schem = Schematic::new(data.split('\n').map(|l| l.to_string()).collect());
         let rel_numbers = schem.get_relevant_numbers();
+        assert_eq!(rel_numbers.len(), 8);
+        assert_eq!(rel_numbers.iter().fold(0, |acc,x| acc+x.value), 4361);
     }
 }
