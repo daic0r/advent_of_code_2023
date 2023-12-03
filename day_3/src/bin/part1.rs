@@ -1,4 +1,5 @@
 use std::borrow::BorrowMut;
+use std::cmp::{max,min};
 
 
 #[allow(dead_code)]
@@ -20,7 +21,8 @@ struct Symbol {
 #[derive(Debug)]
 struct Schematic {
     data: Vec<String>,
-    numbers: Vec<Number>
+    numbers: Vec<Vec<Number>>,
+    symbols: Vec<Vec<Symbol>>
 }
 
 impl Schematic {
@@ -62,21 +64,72 @@ impl Schematic {
     }
 
     pub fn new(data: Vec<String>) -> Self {
-        let mut ret = Schematic { data, numbers: vec![] };
+        let mut ret = Schematic { data, numbers: vec![], symbols: vec![] };
         for (idx,line) in ret.data.iter().enumerate() {
             let mut line_nums = Schematic::scan_line_numbers(line, idx);
-            ret.numbers.append(&mut line_nums);
+            ret.numbers.push(line_nums);
+            let mut line_symbols = vec![];
+            for (col_idx,ch) in line.chars().enumerate() {
+                if !ch.is_ascii_digit() && ch != '.' {
+                    line_symbols.push(Symbol{ line: idx, col: col_idx });
+                }
+            }
+            ret.symbols.push(line_symbols);
         }
+        assert_eq!(ret.symbols.len(), ret.data.len());
+        assert_eq!(ret.numbers.len(), ret.data.len());
         ret
+    }
+
+    fn is_number_adjacent_to_symbol(&self, num: &Number) -> bool {
+        if num.col_range.0 > 0 && self.symbols[num.line].iter().any(|sym| sym.col == num.col_range.0-1) {
+            return true;
+        }
+        if self.symbols[num.line].iter().any(|sym| sym.col == num.col_range.1) {
+            return true;
+        }
+        let check_adj_line = |adj_line: Option<&Vec<Symbol>>| {
+            if let Some(adj_line) = adj_line {
+                if adj_line.iter().any(|sym| sym.col >= max(0, (num.col_range.0 as i32)-1) as usize && sym.col <= num.col_range.1) {
+                    return true;
+                }
+            }
+            false
+        };
+        let mut symbols_above: Option<&Vec<Symbol>> = None;
+        if num.line > 0 {
+            symbols_above = Some(&self.symbols[num.line-1]);
+        }
+        if check_adj_line(symbols_above) {
+            return true;
+        }
+        let mut symbols_below: Option<&Vec<Symbol>> = None;
+        if num.line < self.data.len()-1 {
+            symbols_below = Some(&self.symbols[num.line+1]);
+        }
+        if check_adj_line(symbols_below) {
+            return true;
+        }
+        false
+    }
+
+    pub fn get_relevant_numbers(&self) -> Vec<&Number> {
+        self.numbers.iter()
+            .flatten()
+            .filter(|num| self.is_number_adjacent_to_symbol(num))
+            .collect()
     }
 }
 
 
 fn main() {
-    let data = include_str!("../../input2.txt");
+    let data = include_str!("../../input.txt");
     let schem = Schematic::new(data.split('\n').map(|l| l.to_string()).collect());
-    println!("{:?}", schem);
-
+    let rel_numbers = schem.get_relevant_numbers();
+    for num in &rel_numbers {
+        println!("{:?}", num);
+    }
+    println!("Sum = {}", rel_numbers.iter().fold(0, |acc,x| acc+x.value));
 }
 
 #[cfg(test)]
@@ -87,5 +140,6 @@ mod tests {
     fn test1() {
         let data = include_str!("../../input2.txt");
         let schem = Schematic::new(data.split('\n').map(|l| l.to_string()).collect());
+        let rel_numbers = schem.get_relevant_numbers();
     }
 }
