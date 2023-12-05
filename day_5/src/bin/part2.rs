@@ -61,37 +61,59 @@ impl Mapping {
     }
 }
 
+fn process_seed_range(thread: usize, seed_rng: (usize,usize), mappings: &HashMap::<String,Mapping>) -> usize {
+    let mut final_values = vec![];
+    for seed in seed_rng.0..seed_rng.0+seed_rng.1 {
+        let mut src_cat = "seed";
+        //let mut mapping = mappings.iter().find(|m| m.from == src_cat);
+        let mut mapping = mappings.get(src_cat);
+        let mut src = seed;
+        while let Some(m) = mapping {
+            src = m.get(src);
+            src_cat = m.to.as_str();
+            mapping = mappings.get(src_cat);
+            //mapping = mappings.iter().find(|m| m.from == src_cat);
+        }
+        final_values.push(src);
+        if (seed-seed_rng.0) % 100_000 == 0 {
+            let percent = ((seed-seed_rng.0) as f64 / seed_rng.1 as f64) * 100.0;
+            println!("Thread {}: {}%", thread, percent);
+        }
+    }
+    final_values.iter().min().unwrap().clone()
+}
+
 fn get_final_values(seeds: Vec<(usize,usize)>, mappings: HashMap::<String,Mapping>) -> Vec<usize> {
     let final_values = Arc::new(Mutex::new(vec![]));
     println!("{:?}", seeds);
-    let mut handles = vec![];
     let mappings = Arc::new(mappings);
     for seed_rng in seeds {
-        let final_values = Arc::clone(&final_values);
-        let mappings = Arc::clone(&mappings);
-        handles.push(thread::spawn(move || {
-            for seed in seed_rng.0..seed_rng.0+seed_rng.1 {
-                let mut src_cat = "seed";
-                //let mut mapping = mappings.iter().find(|m| m.from == src_cat);
-                let mut mapping = mappings.get(src_cat);
-                let mut src = seed;
-                while let Some(m) = mapping {
-                    src = m.get(src);
-                    src_cat = m.to.as_str();
-                    mapping = mappings.get(src_cat);
-                    //mapping = mappings.iter().find(|m| m.from == src_cat);
-                }
-                final_values.lock().unwrap().push(src);
-
-                let per = (seed - seed_rng.0) as f32 / seed_rng.1 as f32 * 100.0;
-                if per > 1.0 && (per as u32) % 5 == 0 {
-                    println!("{}%", per);
-                }
+        let mut handles = vec![];
+        let mut rng_begin = seed_rng.0;
+        let mut thread_nr = 0usize;
+        while rng_begin < seed_rng.0 + seed_rng.1 {
+            let mut len = 10_000_000;
+            if rng_begin+len > seed_rng.0 + seed_rng.1 {
+                len = seed_rng.0 + seed_rng.1 - rng_begin;
             }
-        }));
-    }
-    for handle in handles {
-        handle.join();
+            let final_values = Arc::clone(&final_values);
+            let mappings = Arc::clone(&mappings);
+            println!("Starting thread {} for range {}-{}", thread_nr, rng_begin, rng_begin+len);
+            handles.push(thread::spawn(move || {
+                let final_value = process_seed_range(thread_nr, (rng_begin, len), &mappings);
+                final_values.lock().unwrap().push(final_value);
+            }));
+            rng_begin = rng_begin + len;
+            thread_nr += 1;
+        }
+        let mut num_joined = 0;
+        let len = &handles.len();
+        for handle in handles {
+            let _ = handle.join();
+            num_joined += 1;
+            let percent = ((num_joined as f64) / (*len as f64)) * 100.0;
+            println!("\r{}% of threads finished.", percent);
+        }
     }
 
     let vec = final_values.lock().unwrap().clone();
