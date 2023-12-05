@@ -43,26 +43,8 @@ impl Mapping {
         ret
     }
 
-    pub fn get(&self, src_idx: usize) -> usize {
-        let rng: Vec<(&usize, &(usize,usize))> = self.mapping.range((Unbounded, Included(src_idx))).collect();
-        //println!("{:?}", rng);
-        if rng.is_empty() {
-            return src_idx;
-        }
-
-        let last = rng.last().unwrap();
-        let rng_len = last.1.1;
-        let src_rng_begin = last.0;
-        let dst_rng_begin = last.1.0;
-        if src_idx < src_rng_begin + rng_len {
-            return dst_rng_begin + (src_idx - src_rng_begin);
-        }
-
-        return src_idx;
-    }
-
     pub fn get_range(&self, src_rng: (usize,usize)) -> (usize,usize) {
-        let mut rng: Vec<(&usize, &(usize,usize))> = self.mapping.range((Unbounded, Included(src_rng.0))).collect();
+        let rng: Vec<(&usize, &(usize,usize))> = self.mapping.range((Unbounded, Included(src_rng.0))).collect();
         //println!("{:?}", rng);
         if rng.is_empty() {
             return src_rng;
@@ -91,9 +73,7 @@ fn find_mapped_range(seed_rng: (usize,usize), mappings: &HashMap::<String,Mappin
     let mut mapping = mappings.get(src_cat);
     let mut src = seed_rng;
     while let Some(m) = mapping {
-        print!("({},{}) -> ", src.0, src.1);
         src = m.get_range(src);
-        println!("({},{})", src.0, src.1);  
         src_cat = m.to.as_str();
         mapping = mappings.get(src_cat);
         //mapping = mappings.iter().find(|m| m.from == src_cat);
@@ -103,16 +83,20 @@ fn find_mapped_range(seed_rng: (usize,usize), mappings: &HashMap::<String,Mappin
 }
 
 fn get_final_values(seeds: Vec<(usize,usize)>, mappings: HashMap::<String,Mapping>) -> Vec<usize> {
-    let final_values = vec![];
+    let mut final_values = vec![];
     println!("{:?}", seeds);
     for seed_rng in seeds {
         let mut rng = seed_rng;
         while rng.0 < seed_rng.0 + seed_rng.1 {
             let mapped_rng = find_mapped_range(rng, &mappings);
-            println!("---------------------");
-            //println!("({},{}) -> ({},{})", rng.0, rng.1, mapped_rng.0, mapped_rng.1);
+            println!("({},{}) -> ({},{})", rng.0, rng.1, mapped_rng.0, mapped_rng.1);
             rng.0 += mapped_rng.1;
             rng.1 -= mapped_rng.1;
+            
+            // Need to only check the first mapping in an interval because
+            // inside it, we know the mapping grows linearly, therefore
+            // the first is bound to be the smallest
+            final_values.push(mapped_rng.0);
         }
         println!("------------------------------------------------------");
     }
@@ -121,7 +105,7 @@ fn get_final_values(seeds: Vec<(usize,usize)>, mappings: HashMap::<String,Mappin
 }
 
 fn main() {
-    let content = include_str!("../../input2.txt");
+    let content = include_str!("../../input.txt");
     
     let categories = content.split("\n\n");
     //let mut mappings = vec![];
@@ -150,6 +134,6 @@ fn main() {
     let final_values = get_final_values(seeds, mappings);
 
 
-    //println!("Lowest location: {}", final_values.iter().min().unwrap());
+    println!("Lowest location: {}", final_values.iter().min().unwrap());
 
 }
