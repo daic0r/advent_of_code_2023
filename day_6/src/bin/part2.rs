@@ -17,19 +17,11 @@ impl Game {
     }
 
     pub fn calc_ways_to_win(&mut self) {
-        let mut dur = 0u64;
-        let from_dur;
-        let to_dur;
-        while (self.duration - dur)*dur < self.record_dist {
-            dur += 1;
-        }
-        from_dur = dur;
-        dur = self.duration;
-        while (self.duration - dur)*dur < self.record_dist {
-            dur -= 1;
-        }
-        to_dur = dur;
-        self.ways_to_win = to_dur - from_dur + 1;
+        let d = self.duration as f64 / 2.0;
+        let d_2 = d.powi(2);
+        let from_dur_calc = (d - (d_2 - self.record_dist as f64).sqrt()) as u64;
+        let to_dur_calc = (d + (d_2 - self.record_dist as f64).sqrt()) as u64;
+        self.ways_to_win = to_dur_calc - from_dur_calc;
     }
 
 }
