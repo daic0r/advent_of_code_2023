@@ -19,8 +19,9 @@ impl Game {
     pub fn calc_ways_to_win(&mut self) {
         let d = self.duration as f64 / 2.0;
         let d_2 = d.powi(2);
-        let from_dur_calc = (d - (d_2 - self.record_dist as f64).sqrt()) as u64;
-        let to_dur_calc = (d + (d_2 - self.record_dist as f64).sqrt()) as u64;
+        let root = (d_2 - self.record_dist as f64).sqrt();
+        let from_dur_calc = (d - root) as u64;
+        let to_dur_calc = (d + root) as u64;
         self.ways_to_win = to_dur_calc - from_dur_calc;
     }
 
