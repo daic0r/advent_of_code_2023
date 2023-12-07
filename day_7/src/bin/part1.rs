@@ -1,7 +1,9 @@
 #![feature(const_option)]
+
+use std::cmp::Ordering;
 //
 // A, K, Q, J, T, 9, 8, 7, 6, 5, 4, 3, or 2.
-#[derive(PartialEq,Debug)]
+#[derive(PartialEq,PartialOrd,Debug)]
 enum HandKind {
     HighCard = 1,
     OnePair = 2,
@@ -90,6 +92,31 @@ impl Hand {
     }
 }
 
+impl PartialEq for Hand {
+    fn eq(&self, other: &Self) -> bool {
+        self.cards == other.cards && self.kind == other.kind
+    }
+}
+
+impl PartialOrd for Hand {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        match self.kind.partial_cmp(&other.kind) {
+            Some(ord) if ord != Ordering::Equal => Some(ord),
+            _ => {
+                for (ch, ch2) in self.cards.iter().zip(other.cards.iter()) {
+                    if points(*ch) > points(*ch2) {
+                        return Some(Ordering::Greater);
+                    }
+                    else if points(*ch) < points(*ch2) {
+                        return Some(Ordering::Less);
+                    }
+                }
+                Some(Ordering::Equal)
+            }
+        }
+    }
+}
+
 const fn points(c: char) -> u32 {
     match c {
         '2'..='9' => c.to_digit(10).unwrap(),
@@ -168,5 +195,15 @@ mod tests {
         assert_eq!(hand.kind, HandKind::OnePair);
         let hand = Hand::new("KQA22");
         assert_eq!(hand.kind, HandKind::OnePair);
+    }
+
+    #[test]
+    fn test_order() {
+        let hand = Hand::new("AAAAA");
+        let hand2 = Hand::new("AAAAK");
+        assert!(hand > hand2);
+        let hand = Hand::new("AAAAA");
+        let hand2 = Hand::new("KKKKK");
+        assert!(hand > hand2);
     }
 }
