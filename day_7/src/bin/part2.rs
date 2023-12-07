@@ -53,6 +53,7 @@ impl Hand {
                 }
             },
             4 => {
+                println!("testing {}", String::from_iter(hand));
                 if hand.iter().filter(|c| *c == hand.first().unwrap()).count() == 4 {
                     HandKind::FiveOfAKind
                 }
@@ -60,6 +61,10 @@ impl Hand {
                 // 3 identical
                 if hand.first().unwrap() == hand.get(2).unwrap() || hand.last().unwrap() == hand.get(1).unwrap() {
                     HandKind::FourOfAKind
+                }
+                else
+                if hand.first().unwrap() == hand.get(1).unwrap() && hand.last().unwrap() == hand.get(2).unwrap() {
+                    HandKind::FullHouse
                 }
                 else
                 // 2 identical
@@ -106,15 +111,14 @@ impl Hand {
         }
     }
     fn is_full_house(hand: &[char]) -> bool {
-        /*
         let jc = Self::joker_cnt(hand);
-        if jc > 0 {
-            return false;
+        if jc == 0 {
+            let count_first_group = hand.iter().filter(|c| *c == hand.first().unwrap()).count();
+            let count_second_group = hand.iter().filter(|c| *c == hand.last().unwrap()).count();
+            (count_first_group == 3 && count_second_group == 2) || (count_first_group == 2 && count_second_group == 3)
+        } else {
+            Self::determine_jokered_kind(&hand[..hand.len()-jc]) == HandKind::FullHouse
         }
-        */
-        let count_first_group = hand.iter().filter(|c| *c == hand.first().unwrap()).count();
-        let count_second_group = hand.iter().filter(|c| *c == hand.last().unwrap()).count();
-        (count_first_group == 3 && count_second_group == 2) || (count_first_group == 2 && count_second_group == 3)
     }
     fn is_two_pair(hand: &[char]) -> bool {
         /*
@@ -174,10 +178,6 @@ impl Hand {
         }
         else
         if Hand::is_full_house(&sorted) {
-            if cnt > 0 {
-                println!("Full house: {} {}", String::from_iter(&sorted), cnt);
-            }
-            assert!(cnt == 0);
             ret.kind = HandKind::FullHouse;
         }
         else
@@ -264,7 +264,7 @@ const fn points(c: char) -> u32 {
 }
 
 fn main() {
-    let contents = include_str!("../../input2.txt");
+    let contents = include_str!("../../input.txt");
     let lines = contents.split('\n').filter(|l| !l.is_empty());
 
     let mut hands_and_bids = vec![];
@@ -342,6 +342,8 @@ mod tests {
         let hand = Hand::new("5K5K5");
         assert_eq!(hand.kind, HandKind::FullHouse);
         let hand = Hand::new("K5K5K");
+        assert_eq!(hand.kind, HandKind::FullHouse);
+        let hand = Hand::new("2T2JT");
         assert_eq!(hand.kind, HandKind::FullHouse);
     }
 
