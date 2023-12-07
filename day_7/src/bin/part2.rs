@@ -29,6 +29,7 @@ impl Hand {
     }
     // ALL OF THESE ASSUME A SORTED SLICE!!
     fn determine_jokered_kind(hand: &[char]) -> HandKind {
+        assert!(Self::joker_cnt(hand) == 0);
         match hand.len() {
             0..=1 => HandKind::FiveOfAKind,
             2 => {
@@ -62,7 +63,9 @@ impl Hand {
                 }
                 else
                 // 2 identical
-                if hand.first().unwrap() == hand.get(1).unwrap() || hand.last().unwrap() == hand.get(2).unwrap() {
+                if hand.first().unwrap() == hand.get(1).unwrap() || hand.last().unwrap() == hand.get(2).unwrap()
+                    || hand.get(1).unwrap() == hand.get(2).unwrap()
+                {
                     HandKind::ThreeOfAKind
                 }
                 else {
@@ -94,35 +97,39 @@ impl Hand {
     fn is_three_of_a_kind(hand: &[char]) -> bool {
         let jc = Self::joker_cnt(hand);
         if jc == 0 {
-            hand.iter().filter(|c| *c == hand.first().unwrap() ||Self::is_joker(**c)).count() == 3 ||
-                hand.iter().filter(|c| *c == hand.last().unwrap() ||Self::is_joker(**c)).count() == 3 ||
-                hand.iter().filter(|c| *c == hand.get(1).unwrap() ||Self::is_joker(**c)).count() == 3
+            hand.iter().filter(|c| *c == hand.first().unwrap()).count() == 3 ||
+                hand.iter().filter(|c| *c == hand.last().unwrap()).count() == 3 ||
+                hand.iter().filter(|c| *c == hand.get(1).unwrap()).count() == 3
         }
         else {
             Self::determine_jokered_kind(&hand[..hand.len()-jc]) == HandKind::ThreeOfAKind
         }
     }
     fn is_full_house(hand: &[char]) -> bool {
+        /*
         let jc = Self::joker_cnt(hand);
         if jc > 0 {
             return false;
         }
-        let count_first_group = hand.iter().filter(|c| *c == hand.first().unwrap() ||Self::is_joker(**c)).count();
-        let count_second_group = hand.iter().filter(|c| *c == hand.last().unwrap() ||Self::is_joker(**c)).count();
+        */
+        let count_first_group = hand.iter().filter(|c| *c == hand.first().unwrap()).count();
+        let count_second_group = hand.iter().filter(|c| *c == hand.last().unwrap()).count();
         (count_first_group == 3 && count_second_group == 2) || (count_first_group == 2 && count_second_group == 3)
     }
     fn is_two_pair(hand: &[char]) -> bool {
+        /*
         let jc = Self::joker_cnt(hand);
         if jc > 0 {
             return false;
         }
-        let count_first_group = hand.iter().filter(|c| *c == hand.first().unwrap() ||Self::is_joker(**c)).count();
-        let count_last_group = hand.iter().filter(|c| *c == hand.last().unwrap() ||Self::is_joker(**c)).count();
+        */
+        let count_first_group = hand.iter().filter(|c| *c == hand.first().unwrap()).count();
+        let count_last_group = hand.iter().filter(|c| *c == hand.last().unwrap()).count();
         if count_first_group == 2 && count_last_group == 2 {
             return true;
         }
         else
-        if (count_first_group == 2 || count_last_group == 2) && hand.iter().filter(|c| *c == hand.get(2).unwrap() ||Self::is_joker(**c)).count() == 2 {
+        if (count_first_group == 2 || count_last_group == 2) && hand.iter().filter(|c| *c == hand.get(2).unwrap()).count() == 2 {
             return true;
         }
         false
@@ -130,10 +137,10 @@ impl Hand {
     fn is_one_pair(hand: &[char]) -> bool {
         let jc = Self::joker_cnt(hand);
         if jc == 0 {
-            hand.iter().filter(|c| *c == hand.get(1).unwrap() || Self::is_joker(**c)).count() == 2 ||
-                hand.iter().filter(|c| *c == hand.get(2).unwrap() || Self::is_joker(**c)).count() == 2 ||
-                hand.iter().filter(|c| *c == hand.get(3).unwrap() || Self::is_joker(**c)).count() == 2 ||
-                hand.iter().filter(|c| *c == hand.get(4).unwrap() || Self::is_joker(**c)).count() == 2
+            hand.iter().filter(|c| *c == hand.get(1).unwrap()).count() == 2 ||
+                hand.iter().filter(|c| *c == hand.get(2).unwrap()).count() == 2 ||
+                hand.iter().filter(|c| *c == hand.get(3).unwrap()).count() == 2 ||
+                hand.iter().filter(|c| *c == hand.get(4).unwrap()).count() == 2
         }
         else {
             Self::determine_jokered_kind(&hand[..hand.len()-jc]) == HandKind::OnePair
@@ -150,11 +157,12 @@ impl Hand {
             ret.cards.push(ch);
         }
         let mut sorted = ret.cards.clone();
-        sorted.sort_by_key(|c| 14-points(*c, false));
+        sorted.sort_by_key(|c| 14-points(*c));
 
         let cnt = Self::joker_cnt(&sorted);
         if cnt > 0 {
             assert!(&sorted[sorted.len()-cnt..].iter().all(|c| *c == 'J'));
+            println!("{}", String::from_iter(&sorted));
         }
 
         if Hand::is_five_of_a_kind(&sorted) {
@@ -166,6 +174,10 @@ impl Hand {
         }
         else
         if Hand::is_full_house(&sorted) {
+            if cnt > 0 {
+                println!("Full house: {} {}", String::from_iter(&sorted), cnt);
+            }
+            assert!(cnt == 0);
             ret.kind = HandKind::FullHouse;
         }
         else
@@ -174,6 +186,10 @@ impl Hand {
         }
         else
         if Hand::is_two_pair(&sorted) {
+            if cnt > 0 {
+                println!("Two pair: {} {}", String::from_iter(&sorted), cnt);
+            }
+            assert!(cnt == 0);
             ret.kind = HandKind::TwoPair;
         }
         else
@@ -196,10 +212,10 @@ impl PartialOrd for Hand {
             Some(ord) if ord != Ordering::Equal => Some(ord),
             _ => {
                 for (ch, ch2) in self.cards.iter().zip(other.cards.iter()) {
-                    if points(*ch, true) > points(*ch2, true) {
+                    if points(*ch) > points(*ch2) {
                         return Some(Ordering::Greater);
                     }
-                    else if points(*ch, true) < points(*ch2, true) {
+                    else if points(*ch) < points(*ch2) {
                         return Some(Ordering::Less);
                     }
                 }
@@ -219,11 +235,11 @@ impl Ord for Hand {
             ord if ord != Ordering::Equal => ord,
             _ => {
                 for (ch, ch2) in self.cards.iter().zip(other.cards.iter()) {
-                    if points(*ch, true) > points(*ch2, true) {
+                    if points(*ch) > points(*ch2) {
                         println!("{} > {}", ch, ch2);
                         return Ordering::Greater;
                     }
-                    else if points(*ch, true) < points(*ch2, true) {
+                    else if points(*ch) < points(*ch2) {
                         println!("{} < {}", ch, ch2);
                         return Ordering::Less;
                     }
@@ -234,10 +250,10 @@ impl Ord for Hand {
     }
 }
 
-const fn points(c: char, for_sorting: bool) -> u32 {
+const fn points(c: char) -> u32 {
     match c {
-        'J' if !for_sorting => 1,
-        'J' if for_sorting => 11,
+        'J' => 1,
+        //'J' if for_sorting => 11,
         '2'..='9' => c.to_digit(10).unwrap(),
         'T' => 10,
         'Q' => 12,
@@ -248,7 +264,7 @@ const fn points(c: char, for_sorting: bool) -> u32 {
 }
 
 fn main() {
-    let contents = include_str!("../../input.txt");
+    let contents = include_str!("../../input2.txt");
     let lines = contents.split('\n').filter(|l| !l.is_empty());
 
     let mut hands_and_bids = vec![];
@@ -285,6 +301,8 @@ mod tests {
         assert_eq!(hand.kind, HandKind::FiveOfAKind);
         let hand = Hand::new("AJJJJ");
         assert_eq!(hand.kind, HandKind::FiveOfAKind);
+        let hand = Hand::new("JJJJJ");
+        assert_eq!(hand.kind, HandKind::FiveOfAKind);
     }
 
     #[test]
@@ -295,7 +313,7 @@ mod tests {
         assert_eq!(hand.kind, HandKind::FourOfAKind);
         let hand = Hand::new("T55J5");
         let mut v = hand.cards.clone();
-        v.sort_by_key(|c| 14-points(*c, false));
+        v.sort_by_key(|c| 14-points(*c));
         assert_eq!(v, vec![ 'T', '5', '5', '5', 'J' ]);
         assert_eq!(hand.kind, HandKind::FourOfAKind);
 
@@ -310,6 +328,12 @@ mod tests {
         let hand = Hand::new("4K5KK");
         assert_eq!(hand.kind, HandKind::ThreeOfAKind);
         let hand = Hand::new("34544");
+        assert_eq!(hand.kind, HandKind::ThreeOfAKind);
+
+        let hand = Hand::new("JJ345");
+        assert_eq!(hand.kind, HandKind::ThreeOfAKind);
+
+        let hand = Hand::new("8A68J");
         assert_eq!(hand.kind, HandKind::ThreeOfAKind);
     }
 
@@ -340,6 +364,10 @@ mod tests {
         let hand = Hand::new("KQ22A");
         assert_eq!(hand.kind, HandKind::OnePair);
         let hand = Hand::new("KQA22");
+        assert_eq!(hand.kind, HandKind::OnePair);
+        let hand = Hand::new("KQAJ2");
+        assert_eq!(hand.kind, HandKind::OnePair);
+        let hand = Hand::new("KT93J");
         assert_eq!(hand.kind, HandKind::OnePair);
     }
 
