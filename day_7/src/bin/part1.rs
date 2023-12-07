@@ -67,27 +67,29 @@ impl Hand {
         for ch in s.chars() {
             ret.cards.push(ch);
         }
-        ret.cards.sort_by_key(|c| 14-points(*c));
-        if Hand::is_five_of_a_kind(&ret.cards) {
+        let mut sorted = ret.cards.clone();
+        sorted.sort_by_key(|c| 14-points(*c));
+        if Hand::is_five_of_a_kind(&sorted) {
             ret.kind = HandKind::FiveOfAKind;
         }
         else
-        if Hand::is_four_of_a_kind(&ret.cards) {
+        if Hand::is_four_of_a_kind(&sorted) {
             ret.kind = HandKind::FourOfAKind;
         }
-        if Hand::is_full_house(&ret.cards) {
+        else
+        if Hand::is_full_house(&sorted) {
             ret.kind = HandKind::FullHouse;
         }
         else
-        if Hand::is_three_of_a_kind(&ret.cards) {
+        if Hand::is_three_of_a_kind(&sorted) {
             ret.kind = HandKind::ThreeOfAKind;
         }
         else
-        if Hand::is_two_pair(&ret.cards) {
+        if Hand::is_two_pair(&sorted) {
             ret.kind = HandKind::TwoPair;
         }
         else
-        if Hand::is_one_pair(&ret.cards) {
+        if Hand::is_one_pair(&sorted) {
             ret.kind = HandKind::OnePair;
         }
         ret
@@ -130,9 +132,11 @@ impl Ord for Hand {
             _ => {
                 for (ch, ch2) in self.cards.iter().zip(other.cards.iter()) {
                     if points(*ch) > points(*ch2) {
+                        println!("{} > {}", ch, ch2);
                         return Ordering::Greater;
                     }
                     else if points(*ch) < points(*ch2) {
+                        println!("{} < {}", ch, ch2);
                         return Ordering::Less;
                     }
                 }
@@ -155,7 +159,7 @@ const fn points(c: char) -> u32 {
 }
 
 fn main() {
-    let contents = include_str!("../../input2.txt");
+    let contents = include_str!("../../input.txt");
     let lines = contents.split('\n').filter(|l| !l.is_empty());
 
     let mut hands_and_bids = vec![];
@@ -167,7 +171,7 @@ fn main() {
     }
     hands_and_bids.sort_by_key(|h| h.0.clone());
     for (idx, (hand, bid)) in hands_and_bids.iter().enumerate() {
-        println!("{:?} {} {}*{}", hand.kind, String::from_iter(&hand.cards) , bid, idx+1);
+        println!("{:?} {} {}*{}", hand.kind, String::from_iter(&hand.cards), bid, idx+1);
     }
     let sum = hands_and_bids
         .iter()
@@ -183,7 +187,7 @@ mod tests {
     #[test]
     fn hand_from_str() {
         let hand = Hand::new("32T3K");
-        assert_eq!(hand.cards, vec![ 'K', 'T', '3', '3', '2' ]);
+        assert_eq!(hand.cards, vec![ '3', '2', 'T', '3', 'K' ]);
     }
 
     #[test]
@@ -248,5 +252,62 @@ mod tests {
         let hand = Hand::new("AAAAA");
         let hand2 = Hand::new("KKKKK");
         assert!(hand > hand2);
+
+        let hand = Hand::new("33332");
+        let hand2 = Hand::new("2AAAA");
+        assert_eq!(hand.kind, HandKind::FourOfAKind);
+        assert_eq!(hand2.kind, HandKind::FourOfAKind);
+        assert!(hand > hand2);
+
+        assert!(HandKind::FiveOfAKind > HandKind::FourOfAKind);
+        assert!(HandKind::FourOfAKind > HandKind::FullHouse);
+        assert!(HandKind::FullHouse > HandKind::ThreeOfAKind);
+        assert!(HandKind::ThreeOfAKind > HandKind::TwoPair);
+        assert!(HandKind::TwoPair > HandKind::OnePair);
+        assert!(HandKind::OnePair > HandKind::HighCard);
+
+        assert!(HandKind::FiveOfAKind > HandKind::HighCard);
+        assert!(HandKind::FiveOfAKind > HandKind::OnePair);
+        assert!(HandKind::FiveOfAKind > HandKind::TwoPair);
+        assert!(HandKind::FiveOfAKind > HandKind::ThreeOfAKind);
+        assert!(HandKind::FiveOfAKind > HandKind::FullHouse);
+        assert!(HandKind::FiveOfAKind > HandKind::FourOfAKind);
+
+        assert!(HandKind::FourOfAKind > HandKind::HighCard);
+        assert!(HandKind::FourOfAKind > HandKind::OnePair);
+        assert!(HandKind::FourOfAKind > HandKind::TwoPair);
+        assert!(HandKind::FourOfAKind > HandKind::ThreeOfAKind);
+        assert!(HandKind::FourOfAKind > HandKind::FullHouse);
+
+        assert!(HandKind::FullHouse > HandKind::HighCard);
+        assert!(HandKind::FullHouse > HandKind::OnePair);
+        assert!(HandKind::FullHouse > HandKind::TwoPair);
+        assert!(HandKind::FullHouse > HandKind::ThreeOfAKind);
+
+        assert!(HandKind::ThreeOfAKind > HandKind::OnePair);
+        assert!(HandKind::ThreeOfAKind > HandKind::TwoPair);
+        assert!(HandKind::ThreeOfAKind > HandKind::HighCard);
+        
+        assert!(HandKind::TwoPair > HandKind::OnePair);
+        assert!(HandKind::TwoPair > HandKind::HighCard);
+
+        assert!(HandKind::OnePair > HandKind::HighCard);
+    }
+
+    #[test]
+    fn test_points() {
+        assert_eq!(points('2'), 2);
+        assert_eq!(points('3'), 3);
+        assert_eq!(points('4'), 4);
+        assert_eq!(points('5'), 5);
+        assert_eq!(points('6'), 6);
+        assert_eq!(points('7'), 7);
+        assert_eq!(points('8'), 8);
+        assert_eq!(points('9'), 9);
+        assert_eq!(points('T'), 10);
+        assert_eq!(points('J'), 11);
+        assert_eq!(points('Q'), 12);
+        assert_eq!(points('K'), 13);
+        assert_eq!(points('A'), 14);
     }
 }
