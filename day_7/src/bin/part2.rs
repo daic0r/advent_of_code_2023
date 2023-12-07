@@ -53,7 +53,6 @@ impl Hand {
                 }
             },
             4 => {
-                println!("testing {}", String::from_iter(hand));
                 if hand.iter().filter(|c| *c == hand.first().unwrap()).count() == 4 {
                     HandKind::FiveOfAKind
                 }
@@ -121,12 +120,7 @@ impl Hand {
         }
     }
     fn is_two_pair(hand: &[char]) -> bool {
-        /*
-        let jc = Self::joker_cnt(hand);
-        if jc > 0 {
-            return false;
-        }
-        */
+        // two pair shouldn't be possible with a joker
         let count_first_group = hand.iter().filter(|c| *c == hand.first().unwrap()).count();
         let count_last_group = hand.iter().filter(|c| *c == hand.last().unwrap()).count();
         if count_first_group == 2 && count_last_group == 2 {
@@ -208,20 +202,7 @@ impl PartialEq for Hand {
 
 impl PartialOrd for Hand {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        match self.kind.partial_cmp(&other.kind) {
-            Some(ord) if ord != Ordering::Equal => Some(ord),
-            _ => {
-                for (ch, ch2) in self.cards.iter().zip(other.cards.iter()) {
-                    if points(*ch) > points(*ch2) {
-                        return Some(Ordering::Greater);
-                    }
-                    else if points(*ch) < points(*ch2) {
-                        return Some(Ordering::Less);
-                    }
-                }
-                Some(Ordering::Equal)
-            }
-        }
+        Some(self.cmp(other))
     }
 }
 
@@ -253,7 +234,6 @@ impl Ord for Hand {
 const fn points(c: char) -> u32 {
     match c {
         'J' => 1,
-        //'J' if for_sorting => 11,
         '2'..='9' => c.to_digit(10).unwrap(),
         'T' => 10,
         'Q' => 12,
