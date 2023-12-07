@@ -3,7 +3,7 @@
 use std::cmp::Ordering;
 //
 // A, K, Q, J, T, 9, 8, 7, 6, 5, 4, 3, or 2.
-#[derive(PartialEq,PartialOrd,Debug)]
+#[derive(PartialEq,PartialOrd, Ord, Eq, Debug, Clone)]
 enum HandKind {
     HighCard = 1,
     OnePair = 2,
@@ -13,6 +13,8 @@ enum HandKind {
     FourOfAKind = 6,
     FiveOfAKind = 7
 }
+
+#[derive(Clone, Debug)]
 struct Hand {
     cards: Vec<char>,
     kind: HandKind
@@ -117,6 +119,29 @@ impl PartialOrd for Hand {
     }
 }
 
+impl Eq for Hand {
+
+}
+
+impl Ord for Hand {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match self.kind.cmp(&other.kind) {
+            ord if ord != Ordering::Equal => ord,
+            _ => {
+                for (ch, ch2) in self.cards.iter().zip(other.cards.iter()) {
+                    if points(*ch) > points(*ch2) {
+                        return Ordering::Greater;
+                    }
+                    else if points(*ch) < points(*ch2) {
+                        return Ordering::Less;
+                    }
+                }
+                Ordering::Equal
+            }
+        }
+    }
+}
+
 const fn points(c: char) -> u32 {
     match c {
         '2'..='9' => c.to_digit(10).unwrap(),
@@ -130,7 +155,25 @@ const fn points(c: char) -> u32 {
 }
 
 fn main() {
+    let contents = include_str!("../../input2.txt");
+    let lines = contents.split('\n').filter(|l| !l.is_empty());
 
+    let mut hands_and_bids = vec![];
+    for line in lines {
+        let mut splits = line.split_whitespace();
+        let hand = Hand::new(splits.next().unwrap());
+        let bid = splits.next().unwrap().parse::<u32>().unwrap();
+        hands_and_bids.push((hand,bid));
+    }
+    hands_and_bids.sort_by_key(|h| h.0.clone());
+    for (idx, (hand, bid)) in hands_and_bids.iter().enumerate() {
+        println!("{:?} {} {}*{}", hand.kind, String::from_iter(&hand.cards) , bid, idx+1);
+    }
+    let sum = hands_and_bids
+        .iter()
+        .enumerate()
+        .fold(0, |acc,x| acc+((x.0 as u32 + 1) * x.1.1));
+    println!("Sum = {}", sum);
 }
 
 #[cfg(test)]
