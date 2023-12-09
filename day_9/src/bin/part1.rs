@@ -17,7 +17,7 @@ impl Sequence {
 
     fn derive(&self) -> Self {
         Self {
-            values: self.values.windows(2).map(|arr| arr.iter().nth(1).unwrap() - arr.iter().nth(0).unwrap()).collect()
+            values: self.values.windows(2).map(|arr| arr.last().unwrap() - arr.first().unwrap()).collect()
         }
     }
 
@@ -53,7 +53,7 @@ impl fmt::Display for Sequence {
 fn main() {
    let lines = include_str!("../../input.txt").split('\n').filter(|l| !l.is_empty());
 
-   let sum = lines.map(|l| Sequence::new(l).extrapolate().values.last().unwrap().clone()).sum::<i128>();
+   let sum = lines.map(|l| *Sequence::new(l).extrapolate().values.last().unwrap()).sum::<i128>();
 
    println!("Sum = {}", sum);
 }
