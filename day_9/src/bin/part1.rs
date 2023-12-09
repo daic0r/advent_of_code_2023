@@ -3,7 +3,7 @@ use std::cell::RefCell;
 
 #[derive(Debug, Clone)]
 struct Sequence {
-    values: Vec<i128>
+    values: Vec<i32>
 }
 
 impl Sequence {
@@ -11,7 +11,7 @@ impl Sequence {
         let mut ret = Self {
             values: vec![]
         };
-        ret.values = s.split_whitespace().map(|str| str.parse::<i128>().unwrap()).collect();
+        ret.values = s.split_whitespace().map(|str| str.parse::<i32>().unwrap()).collect();
         ret
     }
 
@@ -53,7 +53,7 @@ impl fmt::Display for Sequence {
 fn main() {
    let lines = include_str!("../../input.txt").split('\n').filter(|l| !l.is_empty());
 
-   let sum = lines.map(|l| *Sequence::new(l).extrapolate().values.last().unwrap()).sum::<i128>();
+   let sum = lines.map(|l| *Sequence::new(l).extrapolate().values.last().unwrap()).sum::<i32>();
 
    println!("Sum = {}", sum);
 }

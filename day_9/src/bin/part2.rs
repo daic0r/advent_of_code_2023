@@ -4,7 +4,7 @@ use std::collections::VecDeque;
 
 #[derive(Debug, Clone)]
 struct Sequence {
-    values: VecDeque<i128>
+    values: VecDeque<i32>
 }
 
 impl Sequence {
@@ -12,7 +12,7 @@ impl Sequence {
         let mut ret = Self {
             values: VecDeque::new()
         };
-        ret.values = s.split_whitespace().map(|str| str.parse::<i128>().unwrap()).collect();
+        ret.values = s.split_whitespace().map(|str| str.parse::<i32>().unwrap()).collect();
         ret
     }
 
@@ -35,8 +35,8 @@ impl Sequence {
     }
 
     fn extrapolate_impl(&mut self, 
-        f: fn(&Sequence, &Sequence) -> i128,
-        apply_new_val: fn(&mut Sequence, i128) -> ()
+        f: fn(&Sequence, &Sequence) -> i32,
+        apply_new_val: fn(&mut Sequence, i32) -> ()
     ) -> Self {
         let ders = self.all_derivatives();
         // Extrapolate new value
@@ -75,7 +75,7 @@ impl fmt::Display for Sequence {
 fn main() {
    let lines = include_str!("../../input.txt").split('\n').filter(|l| !l.is_empty());
 
-   let sum = lines.map(|l| *Sequence::new(l).extrapolate_back().values.front().unwrap()).sum::<i128>();
+   let sum = lines.map(|l| *Sequence::new(l).extrapolate_back().values.front().unwrap()).sum::<i32>();
 
    println!("Sum = {}", sum);
 }
