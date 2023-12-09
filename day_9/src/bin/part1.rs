@@ -38,9 +38,7 @@ impl Sequence {
             seq.borrow_mut().values.push(new_val);
         }
 
-        let ret = ders.first().unwrap().borrow();
-        println!("{}", ret);
-        ret.clone()
+        ders.into_iter().nth(0).unwrap().into_inner()
     }
 }
 

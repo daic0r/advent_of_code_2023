@@ -46,9 +46,7 @@ impl Sequence {
             apply_new_val(&mut seq.borrow_mut(), new_val);
         }
 
-        let ret = ders.first().unwrap().borrow();
-        println!("{}", ret);
-        ret.clone()
+        ders.into_iter().nth(0).unwrap().into_inner()
     }
 
     #[allow(dead_code)]
