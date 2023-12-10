@@ -110,44 +110,26 @@ impl MapTile {
                 _ => false
             },
             Ground => false,
-            Start => match rhs {
-                Ground  => false,
+            Start => match offs {
+                (-1, 0) => match rhs {
+                    LeftToRight | TopToRight | BottomToRight => true,
+                    _ => false
+                },
+                (1, 0) => match rhs {
+                    LeftToRight | TopToLeft | BottomToLeft => true,
+                    _ => false
+                },
+                (0, 1) => match rhs {
+                    TopToBottom | TopToRight | TopToLeft => true,
+                    _ => false
+                },
+                (0, -1) => match rhs {
+                    TopToBottom | BottomToRight | BottomToLeft => true,
+                    _ => false
+                },
                 _ => true
             }
         }
-        /*
-        match self {
-            Self::LeftToRight => match rhs {
-                Self::Start | Self::LeftToRight | Self::TopToRight | Self::TopToLeft | Self::BottomToLeft | Self::BottomToRight => true,
-                _ => false
-            },
-            Self::TopToBottom => match rhs {
-                Self::Start | Self::TopToBottom | Self::TopToRight | Self::TopToLeft | Self::BottomToLeft | Self::BottomToRight => true,
-                _ => false
-            },
-            Self::TopToRight => match rhs {
-                Self::Start | Self::LeftToRight | Self::TopToBottom | Self::BottomToRight | Self::BottomToLeft | Self::TopToLeft => true,
-                _ => false
-            },
-            Self::TopToLeft => match rhs {
-                Self::Start | Self::LeftToRight | Self::TopToBottom | Self::BottomToRight | Self::BottomToLeft | Self::TopToRight => true,
-                _ => false
-            },
-            Self::BottomToRight => match rhs {
-                Self::Start | Self::LeftToRight | Self::TopToBottom | Self::TopToRight | Self::TopToLeft | Self::BottomToLeft => true,
-                _ => false
-            },
-            Self::BottomToLeft => match rhs {
-                Self::Start | Self::LeftToRight | Self::TopToBottom | Self::TopToRight | Self::TopToLeft | Self::BottomToRight => true,
-                _ => false
-            },
-            Self::Ground => false,
-            Self::Start => match rhs {
-                Self::Ground  => false,
-                _ => true
-            }
-        }
-        */
     }
 }
 
@@ -189,7 +171,7 @@ impl Map {
         ret
     }
 
-    fn build_list(&mut self) {
+    fn find_end(&mut self) -> Node {
         let coord_start = self.data
             .iter()
             .enumerate()
@@ -262,6 +244,8 @@ impl Map {
 
         println!("Arrived at: {:?}", path_1_last);
         println!("Arrived at: {:?}", path_2_last);
+
+        path_1_last
     }
 
     fn get_tile(&self, x: usize, y: usize) -> &MapTile {
@@ -313,7 +297,7 @@ impl Display for Map {
 }
 
 fn main() {
-    let data = include_str!("../../input3.txt")
+    let data = include_str!("../../input.txt")
         .split('\n')
         .filter_map(
             |l| match l.is_empty() { 
@@ -331,7 +315,8 @@ fn main() {
 
         println!("\n{}", map);
 
-        map.build_list();
+        let end = map.find_end();
+        println!("Distance from start: {}", end.dist_from_start);
 }
 
 #[cfg(test)]
@@ -340,7 +325,7 @@ mod tests {
 
     #[test]
     fn test_construct_map() {
-        let data = include_str!("../../input2.txt")
+        let data = include_str!("../../input.txt")
             .split('\n')
             .filter_map(
                 |l| match l.is_empty() { 
