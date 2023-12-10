@@ -140,7 +140,7 @@ struct Node {
     coord: (usize, usize),
     tile: MapTile,
     dist_from_start: usize,
-    winding_number: i32
+    offset_from_prev: (isize, isize)
 }
 
 #[derive(Debug)]
@@ -170,7 +170,7 @@ impl Map {
                             _ => panic!("Invalid tile")
                         },
                         dist_from_start: 0,
-                        winding_number: 0
+                        offset_from_prev: (0, 0)
                     })
                 }).collect::<Vec<RefCell<Node>>>())
             .collect(),
@@ -207,18 +207,25 @@ impl Map {
         let mut start = self.get_tile(coord_start);
         start.borrow_mut().tile = MapTile::MainLoop;
 
-        let mut path_1_cur = *adj_start.get(0).unwrap();
-        let mut path_2_cur = *adj_start.get(1).unwrap();
+        let mut path_1_cur = adj_start.get(0).unwrap().1;
+        let mut path_2_cur = adj_start.get(1).unwrap().1;
         while path_1_cur.borrow().coord != path_2_cur.borrow().coord {
             let tmp1 = self.get_connected_neighbors(path_1_cur.borrow().coord);
             let tmp2 = self.get_connected_neighbors(path_2_cur.borrow().coord);
 
             let neigh_1 = tmp1.iter()
-                .find(|node| node.borrow().coord != path_1_last.borrow().coord)
+                .find(|node| node.1.borrow().coord != path_1_last.borrow().coord)
                 .unwrap();
             let neigh_2 = tmp2.iter()
-                .find(|node| node.borrow().coord != path_2_last.borrow().coord)
+                .find(|node| node.1.borrow().coord != path_2_last.borrow().coord)
                 .unwrap();
+
+            let cur_1_coord = path_1_cur.borrow().coord;
+            let cur_2_coord = path_2_cur.borrow().coord;
+            path_1_cur.borrow_mut().offset_from_prev = ((cur_1_coord.0 as isize - path_1_last.borrow().coord.0 as isize), (cur_1_coord.1 as isize - path_1_last.borrow().coord.1 as isize));
+            path_2_cur.borrow_mut().offset_from_prev = ((cur_2_coord.0 as isize - path_2_last.borrow().coord.0 as isize), (cur_2_coord.1 as isize - path_2_last.borrow().coord.1 as isize));
+            println!("Path 1: {:?} -> {:?}", path_1_last, path_1_cur);
+            println!("Path 2: {:?} -> {:?}", path_2_last, path_2_cur);
 
             path_1_last = path_1_cur;
             path_1_last.borrow_mut().dist_from_start += 1;
@@ -228,9 +235,16 @@ impl Map {
             path_1_last.borrow_mut().tile = MapTile::MainLoop;
             path_2_last.borrow_mut().tile = MapTile::MainLoop;
 
-            path_1_cur = *neigh_1;
-            path_2_cur = *neigh_2;
+            path_1_cur = neigh_1.1;
+            path_2_cur = neigh_2.1;
+            assert!(neigh_1.0 != (0,0));
+            assert!(neigh_2.0 != (0,0));
         }
+            let cur_1_coord = path_1_cur.borrow().coord;
+            let cur_2_coord = path_2_cur.borrow().coord;
+            path_1_cur.borrow_mut().offset_from_prev = ((cur_1_coord.0 as isize - path_1_last.borrow().coord.0 as isize), (cur_1_coord.1 as isize - path_1_last.borrow().coord.1 as isize));
+            path_2_cur.borrow_mut().offset_from_prev = ((cur_2_coord.0 as isize - path_2_last.borrow().coord.0 as isize), (cur_2_coord.1 as isize - path_2_last.borrow().coord.1 as isize));
+            println!("Path 1: {:?} -> {:?}", path_1_last, path_1_cur);
         path_1_last = path_1_cur;
         path_1_last.borrow_mut().dist_from_start += 1;
         path_2_last = path_2_cur;
@@ -248,7 +262,8 @@ impl Map {
     fn calc_tiles_inside_loop(&self) -> usize {
        self.data 
            .iter()
-           .fold(0, |acc,l| {
+           .enumerate()
+           .fold(0, |acc,(row_num,l)| {
                let cnt = l
                .iter()
                .enumerate()
@@ -256,14 +271,21 @@ impl Map {
                    if node.borrow().tile == MapTile::MainLoop {
                        return acc;
                    }
+
                    if l.iter().enumerate().take_while(|(i,node)| *i < idx && node.borrow().tile != MapTile::MainLoop).count() == idx {
                        return acc;
                    }
-                   acc + (l[idx+1..]
+                   println!("We at ({},{})", idx, row_num);
+                   let cnt_intersec = ((l[idx+1..]
                     .iter()
-                    .map(|node| node.borrow().tile == MapTile::MainLoop)
-                    .filter(|&is_loop| is_loop)
-                    .count() % 2) as usize
+                    .filter(|node| node.borrow().tile == MapTile::MainLoop)
+                    .fold(0, |acc,node| acc + match node.borrow().offset_from_prev {
+                        (-1, _) | (_, -1) => 1,
+                        (1, _) | (_, 1) => -1,
+                        (0, 0) => 0,
+                        x => panic!("Oughtn't happen ({},{}): {:?}", node.borrow().coord.0, node.borrow().coord.1, x)
+                     }) != 0) as usize);
+                    acc + cnt_intersec
                });
                println!("Row: {} tiles inside", cnt);
                acc + cnt
@@ -274,7 +296,7 @@ impl Map {
         self.data.get(coord.1).unwrap().get(coord.0).unwrap()
     }
 
-    fn get_connected_neighbors(&self, coord: (usize, usize)) -> Vec<&RefCell<Node>> {
+    fn get_connected_neighbors(&self, coord: (usize, usize)) -> Vec<((isize,isize), &RefCell<Node>)> {
         let this_tile = self.get_tile(coord);
         let mut ret = vec![];
         for neighbor in &NEIGHBORS {
@@ -286,11 +308,11 @@ impl Map {
                 continue;
             }
             let neighbor_tile = self.get_tile((coord.0.unwrap(), coord.1.unwrap()));
+            assert!(*neighbor != (0, 0));
             if this_tile.borrow().tile.can_connect(neighbor_tile.borrow().tile, *neighbor) {
-                ret.push(neighbor_tile); 
+                ret.push((*neighbor, neighbor_tile));
             }
         }
-        println!("Neighbors of {:?} are {:?}", coord, ret);
         assert!(ret.len() <= 2);
         ret
     }
@@ -320,7 +342,7 @@ impl Display for Map {
 }
 
 fn main() {
-    let data = include_str!("../../input3_part2.txt")
+    let data = include_str!("../../input2_part2.txt")
         .split('\n')
         .filter_map(
             |l| match l.is_empty() { 
