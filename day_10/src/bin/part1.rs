@@ -1,7 +1,36 @@
 use std::fmt::Display;
+use std::collections::LinkedList;
+
+/*
+enum Offset {
+    Zero,
+    Pos(usize),
+    Neg(usize)
+}
+const NEIGHBORS: [(Offset, Offset); 8] = [
+    (Offset::Neg(1), Offset::Neg(1)),
+    (Offset::Zero,  Offset::Neg(1)),
+    (Offset::Pos(1),  Offset::Neg(1)),
+    (Offset::Neg(1),  Offset::Zero),
+    (Offset::Pos(1),   Offset::Zero),
+    (Offset::Neg(1),  Offset::Pos(1)),
+    (Offset::Zero,   Offset::Pos(1)),
+    (Offset::Pos(1),   Offset::Pos(1))
+];
+*/
+const NEIGHBORS: [(isize, isize); 8] = [
+    (-1, -1),
+    (0,  -1),
+    (1,  -1),
+    (-1,  0),
+    (1,   0),
+    (-1,  1),
+    (0,   1),
+    (1,   1)
+];
 
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 enum MapTile {
     LeftToRight,
     TopToBottom,
@@ -13,14 +42,58 @@ enum MapTile {
     Start
 }
 
+impl MapTile {
+    fn can_connect(&self, rhs: MapTile) -> bool {
+        match self {
+            Self::LeftToRight => match rhs {
+                Self::LeftToRight | Self::TopToRight | Self::TopToLeft | Self::BottomToLeft | Self::BottomToRight => true,
+                _ => false
+            },
+            Self::TopToBottom => match rhs {
+                Self::TopToBottom | Self::TopToRight | Self::TopToLeft | Self::BottomToLeft | Self::BottomToRight => true,
+                _ => false
+            },
+            Self::TopToRight => match rhs {
+                Self::LeftToRight | Self::TopToBottom | Self::BottomToRight | Self::BottomToLeft | Self::TopToLeft => true,
+                _ => false
+            },
+            Self::TopToLeft => match rhs {
+                Self::LeftToRight | Self::TopToBottom | Self::BottomToRight | Self::BottomToLeft | Self::TopToRight => true,
+                _ => false
+            },
+            Self::BottomToRight => match rhs {
+                Self::LeftToRight | Self::TopToBottom | Self::TopToRight | Self::TopToLeft | Self::BottomToLeft => true,
+                _ => false
+            },
+            Self::BottomToLeft => match rhs {
+                Self::LeftToRight | Self::TopToBottom | Self::TopToRight | Self::TopToLeft | Self::BottomToRight => true,
+                _ => false
+            },
+            Self::Ground => false,
+            Self::Start => match rhs {
+                Self::Ground  => false,
+                _ => true
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+struct Node {
+    coord: (usize, usize),
+    tile: MapTile,
+    dist_from_start: usize,
+}
+
 #[derive(Debug)]
 struct Map {
-    data: Vec<Vec<MapTile>>
+    data: Vec<Vec<MapTile>>,
+    nodes: LinkedList<Node>
 }
 
 impl Map {
     fn new(d: Vec<Vec<char>>) -> Self {
-        Map {
+        let mut ret = Map {
             data: d
                 .iter()
                 .map(|row| row.iter().map(|col| {
@@ -37,8 +110,39 @@ impl Map {
                         _ => panic!("Invalid tile")
                     }
                 }).collect::<Vec<MapTile>>())
-            .collect()
+            .collect(),
+            nodes: LinkedList::new()
+        };
+
+        todo!()
+    }
+
+    fn build_list(&mut self) {
+         
+    }
+
+    fn get_tile(&self, x: usize, y: usize) -> MapTile {
+        *self.data.get(y).unwrap().get(x).unwrap()
+    }
+
+    fn get_connected_neighbors(&self, x: usize, y: usize) -> Vec<((usize, usize), MapTile)> {
+        let this_tile = self.get_tile(x, y);
+        let mut ret = vec![];
+        for neighbor in &NEIGHBORS {
+            let coord = (x.checked_add_signed(neighbor.0), y.checked_add_signed(neighbor.1));
+            if coord.0.is_none() || coord.1.is_none() {
+                continue;
+            }
+            if coord.0.unwrap() > self.data.first().unwrap().len()-1 || coord.1.unwrap() > self.data.len()-1 {
+                continue;
+            }
+            let neighbor = self.get_tile(coord.0.unwrap(), coord.1.unwrap());
+            if this_tile.can_connect(neighbor) {
+                ret.push(((coord.0.unwrap(), coord.1.unwrap()), neighbor)); 
+            }
         }
+        assert!(ret.len() <= 2);
+        ret
     }
 }
 
