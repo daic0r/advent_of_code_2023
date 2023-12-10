@@ -113,12 +113,30 @@ impl Map {
             .collect(),
             nodes: LinkedList::new()
         };
+        ret.build_list();
 
-        todo!()
+        ret
     }
 
     fn build_list(&mut self) {
-         
+        let coord_start = self.data
+            .iter()
+            .enumerate()
+            .fold((0,0), |acc,l| {
+                let start_col = l.1
+                    .iter()
+                    .enumerate()
+                    .fold(None, |acc,ch|
+                        match ch.1 {
+                            MapTile::Start => Some(ch.0),
+                            _ => acc
+                        });
+                match start_col {
+                    Some(col) => (col, l.0),
+                    None => acc
+                }
+            });
+        println!("Start at: {:?}", coord_start);
     }
 
     fn get_tile(&self, x: usize, y: usize) -> MapTile {
