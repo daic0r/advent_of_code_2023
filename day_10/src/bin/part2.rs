@@ -1,5 +1,5 @@
 use std::fmt::Display;
-use std::collections::LinkedList;
+use std::cell::RefCell;
 
 /*
 enum Offset {
@@ -140,11 +140,12 @@ struct Node {
     coord: (usize, usize),
     tile: MapTile,
     dist_from_start: usize,
+    winding_number: i32
 }
 
 #[derive(Debug)]
 struct Map {
-    data: Vec<Vec<MapTile>>,
+    data: Vec<Vec<RefCell<Node>>>,
 }
 
 impl Map {
@@ -152,26 +153,32 @@ impl Map {
         let mut ret = Map {
             data: d
                 .iter()
-                .map(|row| row.iter().map(|col| {
+                .enumerate()
+                .map(|(idx_row,row)| row.iter().enumerate().map(|(idx_col,col)| {
                     use MapTile::*;
-                    match col {
-                        'S' => Start,
-                        '.' => Ground,
-                        '|' => TopToBottom,
-                        '-' => LeftToRight,
-                        'F' => BottomToRight,
-                        'J' => TopToLeft,
-                        '7' => BottomToLeft,
-                        'L' => TopToRight,
-                        _ => panic!("Invalid tile")
-                    }
-                }).collect::<Vec<MapTile>>())
+                    RefCell::new(Node {
+                        coord: (idx_col, idx_row),
+                        tile: match col {
+                            'S' => Start,
+                            '.' => Ground,
+                            '|' => TopToBottom,
+                            '-' => LeftToRight,
+                            'F' => BottomToRight,
+                            'J' => TopToLeft,
+                            '7' => BottomToLeft,
+                            'L' => TopToRight,
+                            _ => panic!("Invalid tile")
+                        },
+                        dist_from_start: 0,
+                        winding_number: 0
+                    })
+                }).collect::<Vec<RefCell<Node>>>())
             .collect(),
         };
         ret
     }
 
-    fn mark_main_loop(&mut self) -> Node {
+    fn mark_main_loop(&self) -> &RefCell<Node> {
         let coord_start = self.data
             .iter()
             .enumerate()
@@ -180,7 +187,7 @@ impl Map {
                     .iter()
                     .enumerate()
                     .fold(None, |acc,ch|
-                        match ch.1 {
+                        match ch.1.borrow_mut().tile {
                             MapTile::Start => Some(ch.0),
                             _ => acc
                         });
@@ -191,62 +198,46 @@ impl Map {
             });
         println!("Start at: {:?}", coord_start);
 
-        let start = self.data.get(coord_start.1).unwrap().get(coord_start.0).unwrap();
-        let adj_start = self.get_connected_neighbors(coord_start.0, coord_start.1);
+        let mut start: &RefCell<Node> = self.get_tile(coord_start);
+        let adj_start = self.get_connected_neighbors(coord_start);
         // ((Coords), dist_to_start)
-        let mut path_1_last = Node {
-            dist_from_start: 0,
-            coord: coord_start,
-            tile: *start
-        };
-        let mut path_2_last = Node {
-            dist_from_start: 0,
-            coord: coord_start,
-            tile: *start
-        };
-        let mut start = self.get_tile_mut(coord_start.0, coord_start.1);
-        *start = MapTile::MainLoop;
+        let mut path_1_last = start;
+        let mut path_2_last = start;
+
+        let mut start = self.get_tile(coord_start);
+        start.borrow_mut().tile = MapTile::MainLoop;
+
         let mut path_1_cur = *adj_start.get(0).unwrap();
         let mut path_2_cur = *adj_start.get(1).unwrap();
-        while path_1_cur.0 != path_2_cur.0 {
-            let tmp1 = self.get_connected_neighbors(path_1_cur.0.0, path_1_cur.0.1);
-            let tmp2 = self.get_connected_neighbors(path_2_cur.0.0, path_2_cur.0.1);
+        while path_1_cur.borrow().coord != path_2_cur.borrow().coord {
+            let tmp1 = self.get_connected_neighbors(path_1_cur.borrow().coord);
+            let tmp2 = self.get_connected_neighbors(path_2_cur.borrow().coord);
 
             let neigh_1 = tmp1.iter()
-                .find(|(coord,tile)| *coord != path_1_last.coord)
+                .find(|node| node.borrow().coord != path_1_last.borrow().coord)
                 .unwrap();
             let neigh_2 = tmp2.iter()
-                .find(|(coord,tile)| *coord != path_2_last.coord)
+                .find(|node| node.borrow().coord != path_2_last.borrow().coord)
                 .unwrap();
 
-            path_1_last = Node {
-                dist_from_start: path_1_last.dist_from_start + 1,
-                coord: path_1_cur.0,
-                tile: path_1_cur.1
-            };
-            path_2_last = Node {
-                dist_from_start: path_2_last.dist_from_start + 1,
-                coord: path_2_cur.0,
-                tile: path_2_cur.1
-            };
-            *self.get_tile_mut(path_1_last.coord.0, path_1_last.coord.1) = MapTile::MainLoop;
-            *self.get_tile_mut(path_2_last.coord.0, path_2_last.coord.1) = MapTile::MainLoop;
+            path_1_last = path_1_cur;
+            path_1_last.borrow_mut().dist_from_start += 1;
+            path_2_last = path_2_cur;
+            path_2_last.borrow_mut().dist_from_start += 1;
+
+            path_1_last.borrow_mut().tile = MapTile::MainLoop;
+            path_2_last.borrow_mut().tile = MapTile::MainLoop;
 
             path_1_cur = *neigh_1;
             path_2_cur = *neigh_2;
         }
-        path_1_last = Node {
-            dist_from_start: path_1_last.dist_from_start + 1,
-            coord: path_1_cur.0,
-            tile: path_1_cur.1
-        };
-        path_2_last = Node {
-            dist_from_start: path_2_last.dist_from_start + 1,
-            coord: path_2_cur.0,
-            tile: path_2_cur.1
-        };
-        *self.get_tile_mut(path_1_last.coord.0, path_1_last.coord.1) = MapTile::MainLoop;
-        *self.get_tile_mut(path_2_last.coord.0, path_2_last.coord.1) = MapTile::MainLoop;
+        path_1_last = path_1_cur;
+        path_1_last.borrow_mut().dist_from_start += 1;
+        path_2_last = path_2_cur;
+        path_2_last.borrow_mut().dist_from_start += 1;
+
+        path_1_last.borrow_mut().tile = MapTile::MainLoop;
+        path_2_last.borrow_mut().tile = MapTile::MainLoop;
 
         println!("Arrived at: {:?}", path_1_last);
         println!("Arrived at: {:?}", path_2_last);
@@ -261,16 +252,16 @@ impl Map {
                let cnt = l
                .iter()
                .enumerate()
-               .fold(0, |acc,(idx,&tile)| {
-                   if tile == MapTile::MainLoop {
+               .fold(0, |acc,(idx,node)| {
+                   if node.borrow().tile == MapTile::MainLoop {
                        return acc;
                    }
-                   if l.iter().enumerate().take_while(|(i,&tile)| *i < idx && tile != MapTile::MainLoop).count() == idx {
+                   if l.iter().enumerate().take_while(|(i,node)| *i < idx && node.borrow().tile != MapTile::MainLoop).count() == idx {
                        return acc;
                    }
                    acc + (l[idx+1..]
                     .iter()
-                    .map(|&tile| tile == MapTile::MainLoop)
+                    .map(|node| node.borrow().tile == MapTile::MainLoop)
                     .filter(|&is_loop| is_loop)
                     .count() % 2) as usize
                });
@@ -279,30 +270,27 @@ impl Map {
            })
     }
 
-    fn get_tile(&self, x: usize, y: usize) -> &MapTile {
-        self.data.get(y).unwrap().get(x).unwrap()
-    }
-    fn get_tile_mut(&mut self, x: usize, y: usize) -> &mut MapTile {
-        self.data.get_mut(y).unwrap().get_mut(x).unwrap()
+    fn get_tile(&self, coord: (usize, usize)) -> &RefCell<Node> {
+        self.data.get(coord.1).unwrap().get(coord.0).unwrap()
     }
 
-    fn get_connected_neighbors(&self, x: usize, y: usize) -> Vec<((usize, usize), MapTile)> {
-        let this_tile = self.get_tile(x, y);
+    fn get_connected_neighbors(&self, coord: (usize, usize)) -> Vec<&RefCell<Node>> {
+        let this_tile = self.get_tile(coord);
         let mut ret = vec![];
         for neighbor in &NEIGHBORS {
-            let coord = (x.checked_add_signed(neighbor.0), y.checked_add_signed(neighbor.1));
+            let coord = (coord.0.checked_add_signed(neighbor.0), coord.1.checked_add_signed(neighbor.1));
             if coord.0.is_none() || coord.1.is_none() {
                 continue;
             }
             if coord.0.unwrap() > self.data.first().unwrap().len()-1 || coord.1.unwrap() > self.data.len()-1 {
                 continue;
             }
-            let neighbor_tile = self.get_tile(coord.0.unwrap(), coord.1.unwrap());
-            if this_tile.can_connect(*neighbor_tile, *neighbor) {
-                ret.push(((coord.0.unwrap(), coord.1.unwrap()), *neighbor_tile)); 
+            let neighbor_tile = self.get_tile((coord.0.unwrap(), coord.1.unwrap()));
+            if this_tile.borrow().tile.can_connect(neighbor_tile.borrow().tile, *neighbor) {
+                ret.push(neighbor_tile); 
             }
         }
-        println!("Neighbors of {:?} are {:?}", (x, y), ret);
+        println!("Neighbors of {:?} are {:?}", coord, ret);
         assert!(ret.len() <= 2);
         ret
     }
@@ -313,7 +301,7 @@ impl Display for Map {
         for row in &self.data {
             for col in row {
                 use MapTile::*;
-                match col {
+                match col.borrow().tile {
                     LeftToRight => write!(f, "-")?,
                     TopToBottom => write!(f, "|")?,
                     TopToRight => write!(f, "L")?,
@@ -332,7 +320,7 @@ impl Display for Map {
 }
 
 fn main() {
-    let data = include_str!("../../input2_part2.txt")
+    let data = include_str!("../../input3_part2.txt")
         .split('\n')
         .filter_map(
             |l| match l.is_empty() { 
