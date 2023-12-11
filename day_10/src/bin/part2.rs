@@ -36,7 +36,6 @@ enum MapTile {
     BottomToLeft,
     Ground,
     Start,
-    MainLoop
 }
 
 impl MapTile {
@@ -140,7 +139,8 @@ struct Node {
     coord: (usize, usize),
     tile: MapTile,
     dist_from_start: usize,
-    offset_from_prev: (isize, isize)
+    offset_from_prev: (isize, isize),
+    on_loop: bool
 }
 
 #[derive(Debug)]
@@ -170,7 +170,8 @@ impl Map {
                             _ => panic!("Invalid tile")
                         },
                         dist_from_start: 0,
-                        offset_from_prev: (0, 0)
+                        offset_from_prev: (0, 0),
+                        on_loop: false
                     })
                 }).collect::<Vec<RefCell<Node>>>())
             .collect(),
@@ -198,63 +199,42 @@ impl Map {
             });
         println!("Start at: {:?}", coord_start);
 
-        let mut start: &RefCell<Node> = self.get_tile(coord_start);
+        let start: &RefCell<Node> = self.get_tile(coord_start);
         let adj_start = self.get_connected_neighbors(coord_start);
         // ((Coords), dist_to_start)
         let mut path_1_last = start;
-        let mut path_2_last = start;
 
-        let mut start = self.get_tile(coord_start);
-        start.borrow_mut().tile = MapTile::MainLoop;
+        let start = self.get_tile(coord_start);
 
         let mut path_1_cur = adj_start.get(0).unwrap().1;
-        let mut path_2_cur = adj_start.get(1).unwrap().1;
-        while path_1_cur.borrow().coord != path_2_cur.borrow().coord {
+        while path_1_cur.borrow().coord != start.borrow().coord {
             let tmp1 = self.get_connected_neighbors(path_1_cur.borrow().coord);
-            let tmp2 = self.get_connected_neighbors(path_2_cur.borrow().coord);
 
             let neigh_1 = tmp1.iter()
                 .find(|node| node.1.borrow().coord != path_1_last.borrow().coord)
-                .unwrap();
-            let neigh_2 = tmp2.iter()
-                .find(|node| node.1.borrow().coord != path_2_last.borrow().coord)
-                .unwrap();
+                .expect(format!("No neighbor for {:?} found", path_1_last.borrow().coord).as_str());
 
             let cur_1_coord = path_1_cur.borrow().coord;
-            let cur_2_coord = path_2_cur.borrow().coord;
             path_1_cur.borrow_mut().offset_from_prev = ((cur_1_coord.0 as isize - path_1_last.borrow().coord.0 as isize), (cur_1_coord.1 as isize - path_1_last.borrow().coord.1 as isize));
-            path_2_cur.borrow_mut().offset_from_prev = ((cur_2_coord.0 as isize - path_2_last.borrow().coord.0 as isize), (cur_2_coord.1 as isize - path_2_last.borrow().coord.1 as isize));
             println!("Path 1: {:?} -> {:?}", path_1_last, path_1_cur);
-            println!("Path 2: {:?} -> {:?}", path_2_last, path_2_cur);
 
             path_1_last = path_1_cur;
             path_1_last.borrow_mut().dist_from_start += 1;
-            path_2_last = path_2_cur;
-            path_2_last.borrow_mut().dist_from_start += 1;
-
-            path_1_last.borrow_mut().tile = MapTile::MainLoop;
-            path_2_last.borrow_mut().tile = MapTile::MainLoop;
+            path_1_last.borrow_mut().on_loop = true;
 
             path_1_cur = neigh_1.1;
-            path_2_cur = neigh_2.1;
             assert!(neigh_1.0 != (0,0));
-            assert!(neigh_2.0 != (0,0));
         }
             let cur_1_coord = path_1_cur.borrow().coord;
-            let cur_2_coord = path_2_cur.borrow().coord;
             path_1_cur.borrow_mut().offset_from_prev = ((cur_1_coord.0 as isize - path_1_last.borrow().coord.0 as isize), (cur_1_coord.1 as isize - path_1_last.borrow().coord.1 as isize));
-            path_2_cur.borrow_mut().offset_from_prev = ((cur_2_coord.0 as isize - path_2_last.borrow().coord.0 as isize), (cur_2_coord.1 as isize - path_2_last.borrow().coord.1 as isize));
             println!("Path 1: {:?} -> {:?}", path_1_last, path_1_cur);
         path_1_last = path_1_cur;
         path_1_last.borrow_mut().dist_from_start += 1;
-        path_2_last = path_2_cur;
-        path_2_last.borrow_mut().dist_from_start += 1;
 
-        path_1_last.borrow_mut().tile = MapTile::MainLoop;
-        path_2_last.borrow_mut().tile = MapTile::MainLoop;
+        path_1_last.borrow_mut().on_loop = true;
+        start.borrow_mut().on_loop = true;
 
         println!("Arrived at: {:?}", path_1_last);
-        println!("Arrived at: {:?}", path_2_last);
 
         path_1_last
     }
@@ -268,24 +248,72 @@ impl Map {
                .iter()
                .enumerate()
                .fold(0, |acc,(idx,node)| {
-                   if node.borrow().tile == MapTile::MainLoop {
+                   if node.borrow().on_loop {
                        return acc;
                    }
 
-                   if l.iter().enumerate().take_while(|(i,node)| *i < idx && node.borrow().tile != MapTile::MainLoop).count() == idx {
+                   if l.iter().enumerate().take_while(|(i,node)| *i < idx && node.borrow().on_loop == false).count() == idx {
                        return acc;
                    }
                    println!("We at ({},{})", idx, row_num);
+                    if idx > l.len()-2 {
+                        return acc;
+                    }
+                    let mut prev_tile = node;
+                    let mut winding_num = 0;
+                    for node in &l[idx+1..l.len()] {
+                        println!("{:?}", node.borrow().tile);
+                        if (node.borrow().tile != prev_tile.borrow().tile) ||
+                            (node.borrow().offset_from_prev != prev_tile.borrow().offset_from_prev)
+                        {
+                            /*
+                            let relevant_tile = match prev_tile.borrow().on_loop {
+                                true => prev_tile,
+                                false => node
+                            };
+                            */
+                            let relevant_tile = node;
+                            if relevant_tile.borrow().on_loop {
+                                winding_num += match (relevant_tile.borrow().tile, relevant_tile.borrow().offset_from_prev) {
+                                    (MapTile::TopToRight, _) | (MapTile::BottomToRight, _) => 1,
+                                    (MapTile::TopToLeft, _) | (MapTile::BottomToLeft, _) => -1,
+                                    (_, (-1, _)) | (_, (_, -1)) => -1,
+                                    (_, (1, _)) | (_, (_, 1)) => 1,
+                                    _ => 0
+                                    //(0, 0) => 0,
+                             //       x => panic!("Oughtn't happen ({},{}): {:?}", node.borrow().coord.0, node.borrow().coord.1, x)
+                                };
+                            }
+                            /*
+                            } else {
+                                winding_num += match relevant_tile.borrow().offset_from_prev {
+                                    (-1, _) | (_, -1) => 1,
+                                    (1, _) | (_, 1) => -1,
+                                    //(0, 0) => 0,
+                                    x => panic!("Oughtn't happen ({},{}): {:?}", node.borrow().coord.0, node.borrow().coord.1, x)
+                                };
+                            }
+                            */
+                            println!("Adapting window num at {:?}, winding_num = {}", node.borrow().coord, winding_num);
+                        }
+                        prev_tile = node;
+                    }
+                    acc + ((winding_num != 0) as usize)
+                   /*
                    let cnt_intersec = ((l[idx+1..]
                     .iter()
                     .filter(|node| node.borrow().tile == MapTile::MainLoop)
-                    .fold(0, |acc,node| acc + match node.borrow().offset_from_prev {
+                    .fold(0, |acc,node| 
+                        let ret;
+                        acc + match node.borrow().offset_from_prev {
                         (-1, _) | (_, -1) => 1,
                         (1, _) | (_, 1) => -1,
                         (0, 0) => 0,
                         x => panic!("Oughtn't happen ({},{}): {:?}", node.borrow().coord.0, node.borrow().coord.1, x)
-                     }) != 0) as usize);
+                     }
+                    ) != 0) as usize);
                     acc + cnt_intersec
+                   */
                });
                println!("Row: {} tiles inside", cnt);
                acc + cnt
@@ -315,6 +343,25 @@ impl Map {
         }
         assert!(ret.len() <= 2);
         ret
+    }
+
+    fn debug_out(&self) {
+        for row in &self.data {
+            for col in row {
+                use MapTile::*;
+                match col.borrow().tile {
+                    MainLoop => match col.borrow().offset_from_prev {
+                        (0, -1) => print!("^"),
+                        (0, 1) => print!("v"),
+                        (-1, 0) => print!("<"),
+                        (1, 0) => print!(">"),
+                        _ => print!("?")
+                    },
+                    _ => print!(".")
+                }
+            }
+            println!();
+        }
     }
 }
 
@@ -364,6 +411,8 @@ fn main() {
         println!("\n{}", map);
         
         let num_inside = map.calc_tiles_inside_loop();
+
+        map.debug_out();
         println!("Tiles inside: {}", num_inside);
 }
 
