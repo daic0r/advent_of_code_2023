@@ -259,46 +259,37 @@ impl Map {
                     if idx > l.len()-2 {
                         return acc;
                     }
-                    let mut prev_tile = node;
-                    let mut winding_num = 0;
+                    let mut prev_relevant: Option<Node> = None;
+                    let mut outside = true;
                     for node in &l[idx+1..l.len()] {
-                        println!("{:?}", node.borrow().tile);
-                        if (node.borrow().tile != prev_tile.borrow().tile) ||
-                            (node.borrow().offset_from_prev != prev_tile.borrow().offset_from_prev)
-                        {
-                            /*
-                            let relevant_tile = match prev_tile.borrow().on_loop {
-                                true => prev_tile,
-                                false => node
-                            };
-                            */
-                            let relevant_tile = node;
-                            if relevant_tile.borrow().on_loop {
-                                winding_num += match (relevant_tile.borrow().tile, relevant_tile.borrow().offset_from_prev) {
-                                    (MapTile::TopToRight, _) | (MapTile::BottomToRight, _) => 1,
-                                    (MapTile::TopToLeft, _) | (MapTile::BottomToLeft, _) => -1,
-                                    (_, (-1, _)) | (_, (_, -1)) => -1,
-                                    (_, (1, _)) | (_, (_, 1)) => 1,
-                                    _ => 0
-                                    //(0, 0) => 0,
-                             //       x => panic!("Oughtn't happen ({},{}): {:?}", node.borrow().coord.0, node.borrow().coord.1, x)
-                                };
-                            }
-                            /*
-                            } else {
-                                winding_num += match relevant_tile.borrow().offset_from_prev {
-                                    (-1, _) | (_, -1) => 1,
-                                    (1, _) | (_, 1) => -1,
-                                    //(0, 0) => 0,
-                                    x => panic!("Oughtn't happen ({},{}): {:?}", node.borrow().coord.0, node.borrow().coord.1, x)
-                                };
-                            }
-                            */
-                            println!("Adapting window num at {:?}, winding_num = {}", node.borrow().coord, winding_num);
+                        if !node.borrow().on_loop {
+                            continue;
                         }
-                        prev_tile = node;
+                        match node.borrow().tile {
+                            MapTile::TopToRight | MapTile::BottomToRight => {
+                                prev_relevant = Some(*node.borrow());
+                                //outside = !outside;
+                            },
+                            MapTile::BottomToLeft => {
+                              if prev_relevant.is_some() && prev_relevant.unwrap().tile == MapTile::TopToRight {
+                                prev_relevant = None;
+                                outside = !outside;
+                              }
+                            },
+                          MapTile::TopToLeft => {
+                              if prev_relevant.is_some() && prev_relevant.unwrap().tile == MapTile::BottomToRight {
+                                prev_relevant = None;
+                                outside = !outside;
+                              }
+                            },
+                            MapTile::TopToBottom => {
+                                outside = !outside;
+                            },
+                            _ => {}
+                        }
+                        println!("{:?}", node.borrow().tile);
                     }
-                    acc + ((winding_num != 0) as usize)
+                    acc + (!outside as usize)
                    /*
                    let cnt_intersec = ((l[idx+1..]
                     .iter()
@@ -379,7 +370,6 @@ impl Display for Map {
                     BottomToLeft => write!(f, "7")?,
                     Ground => write!(f, ".")?,
                     Start => write!(f, "S")?,
-                    MainLoop => write!(f, "X")?
                 }
             }
             write!(f, "\n")?;
@@ -389,7 +379,7 @@ impl Display for Map {
 }
 
 fn main() {
-    let data = include_str!("../../input2_part2.txt")
+    let data = include_str!("../../input3_part2.txt")
         .split('\n')
         .filter_map(
             |l| match l.is_empty() { 
