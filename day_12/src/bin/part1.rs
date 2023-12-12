@@ -77,16 +77,29 @@ fn permutation_is_group(perm: &str, len: usize, need_beg_sep: bool, need_end_sep
     perm[idx_start..idx_end].chars().all(|c| c == '#')
 }
 
+fn get_groups_from_perm(perm: &str) -> Vec<usize> {
+    perm.split('.').filter(|s| !s.is_empty()).map(|str| str.len()).collect()
+}
+
 fn main() {
-    let lines = include_str!("../../input2.txt").lines().collect::<Vec<&str>>();
+    let lines = include_str!("../../input.txt").lines().collect::<Vec<&str>>();
     let mut arrangements = lines.iter().map(|l| Arrangement::new(l)).collect::<Vec<Arrangement>>();
 
+    let mut sum = 0usize;
     for a in arrangements {
+        let perms = find_possible_permutations(&a.data);
+        /*
         println!("{:?}", a.data);
-        for p in find_possible_permutations(&a.data) {
+        for p in &perms {
             println!("  {:?}", p);
         }
+        println!("----------------");
+        */
+
+        sum += perms.iter().map(|p| get_groups_from_perm(p)).filter(|v_groups| *v_groups == a.layout).count()
     }
+    
+    println!("Sum of possible arrangements: {}", sum);
 }
 
 #[cfg(test)]
@@ -142,4 +155,11 @@ mod tests {
 
     }
 
+    #[test]
+    fn test_get_groups_from_perm() {
+        let perm = "##.....###..#####";
+        assert_eq!(get_groups_from_perm(perm), vec![2,3,5]);
+        let perm = "##.###.###..#####";
+        assert_eq!(get_groups_from_perm(perm), vec![2,3,3,5]);
+    }
 }
