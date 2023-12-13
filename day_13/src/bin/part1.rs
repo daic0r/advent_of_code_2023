@@ -15,7 +15,6 @@ fn find_reflection_idx(pattern: &Vec<&str>, horizontal: bool) -> Option<(usize,u
                         println!("horz: {} != {}", idx+1+cmp_idx, idx-cmp_idx);
                         invalid = true;
                         break;
-                        //return None;
                     }
                     if cmp_idx == idx {
                         cmp_idx += 1;
@@ -54,7 +53,6 @@ fn find_reflection_idx(pattern: &Vec<&str>, horizontal: bool) -> Option<(usize,u
                         println!("vert: {} != {}", idx+1+cmp_idx, idx-cmp_idx);
                         invalid = true;
                         break;
-                        //return None;
                     }
                     if cmp_idx == idx {
                         cmp_idx += 1;
@@ -82,7 +80,6 @@ fn main() {
         .collect::<Vec<Vec<&str>>>();
 
     let mut sum = 0usize;
-    let mut idx = 0;
     for pattern in patterns {
         for line in &pattern {
             println!("{}", line);
@@ -91,18 +88,7 @@ fn main() {
         let ref_horz = find_reflection_idx(&pattern, true);
         let ref_vert = find_reflection_idx(&pattern, false);
         if let (Some(vert), Some(horz)) = (ref_vert, ref_horz) {
-            println!("Axis: both");
-            if vert.1 > horz.1 {
-                println!("Axis: vertical");
-                let val = vert.0 + 1;
-                println!("{:?}, left: {}", vert, val);
-                sum += val;
-            } else {
-                println!("Axis: horizontal");
-                let val = (horz.0 + 1) * 100;
-                println!("{:?}, above: {}", horz, val);
-                sum += val;
-            }
+            panic!("Both reflections found: {:?}, {:?}", vert, horz);
         } else {
             if let Some(vert) = ref_vert {
                 println!("Axis: vertical");
@@ -122,13 +108,6 @@ fn main() {
             }
         }
         println!("---------------------");
-        /*
-        idx += 1;
-        if idx == 11 {
-            break;
-        }
-        */
-
     }
     println!("Sum = {}", sum);
 }

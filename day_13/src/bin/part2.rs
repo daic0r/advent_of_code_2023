@@ -35,7 +35,6 @@ fn find_reflection_idx(pattern: &Vec<&str>, horizontal: bool) -> Option<(usize,u
                         println!("horz: {} != {}", idx+1+cmp_idx, idx-cmp_idx);
                         invalid = true;
                         break;
-                        //return None;
                     }
                     if cmp_idx == idx {
                         cmp_idx += 1;
@@ -52,7 +51,6 @@ fn find_reflection_idx(pattern: &Vec<&str>, horizontal: bool) -> Option<(usize,u
         }
     } else {
         let cnt = pattern.first().unwrap().len();
-        let num_lines = pattern.len();
         for idx in 0..cnt {
             if idx == cnt - 1 {
                 break; 
@@ -68,7 +66,6 @@ fn find_reflection_idx(pattern: &Vec<&str>, horizontal: bool) -> Option<(usize,u
                         println!("vert: {} != {}", idx+1+cmp_idx, idx-cmp_idx);
                         invalid = true;
                         break;
-                        //return None;
                     }
                     if cmp_idx == idx {
                         cmp_idx += 1;
@@ -103,7 +100,7 @@ fn main() {
 
         let ref_horz = find_reflection_idx(&pattern, true);
         let ref_vert = find_reflection_idx(&pattern, false);
-        if let (Some(vert), Some(horz)) = (ref_vert, ref_horz) {
+        if let (Some(_), Some(_)) = (ref_vert, ref_horz) {
             panic!("Both reflections found");
         } else {
             if let Some(vert) = ref_vert {
