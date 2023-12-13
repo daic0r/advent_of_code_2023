@@ -7,17 +7,27 @@ fn find_reflection_idx(pattern: &Vec<&str>, horizontal: bool) -> Option<(usize,u
                 break; 
             }
             if *line == **pattern.get(idx+1).unwrap(){
+                println!("horz: {} == {}", idx, idx+1);
                 let mut cmp_idx = 1usize;
-                while cmp_idx+idx+1 < cnt && cmp_idx <= idx && idx < cnt-2  {
+                let mut invalid = false;
+                while cmp_idx+idx+1 < cnt && cmp_idx <= idx {
                     if *pattern.get(idx+1+cmp_idx).unwrap() != *pattern.get(idx-cmp_idx).unwrap() {
-                        return None;
+                        println!("horz: {} != {}", idx+1+cmp_idx, idx-cmp_idx);
+                        invalid = true;
+                        break;
+                        //return None;
                     }
-                    cmp_idx += 1;
                     if cmp_idx == idx {
+                        cmp_idx += 1;
                         break;
                     }
+                    cmp_idx += 1;
+                }
+                if invalid {
+                    continue;
                 }
                 ret = Some((idx, cmp_idx));
+                break;
             }
         }
     } else {
@@ -34,20 +44,29 @@ fn find_reflection_idx(pattern: &Vec<&str>, horizontal: bool) -> Option<(usize,u
             if ident_count == num_lines
             {
                 let mut cmp_idx = 1usize;
-                while cmp_idx+idx+1 < cnt && cmp_idx <= idx && idx < cnt-2  {
+                let mut invalid = false;
+                while cmp_idx+idx+1 < cnt && cmp_idx <= idx {
                     if pattern.iter()
                                 .enumerate()
                                 .filter(|&(_, &l)| l.chars().nth(idx-cmp_idx) == l.chars().nth(idx+1+cmp_idx))
                                 .count() != num_lines
                     {
-                        return None;
+                        println!("vert: {} != {}", idx+1+cmp_idx, idx-cmp_idx);
+                        invalid = true;
+                        break;
+                        //return None;
                     }
-                    cmp_idx += 1;
                     if cmp_idx == idx {
+                        cmp_idx += 1;
                         break;
                     }
+                    cmp_idx += 1;
+                }
+                if invalid {
+                    continue;
                 }
                 ret = Some((idx, cmp_idx));
+                break;
             }
         }
 
@@ -57,12 +76,13 @@ fn find_reflection_idx(pattern: &Vec<&str>, horizontal: bool) -> Option<(usize,u
 }
 
 fn main() {
-    let patterns = include_str!("../../input2.txt")
+    let patterns = include_str!("../../input.txt")
         .split("\n\n")
         .map(|pat_str| pat_str.lines().collect::<Vec<&str>>())
         .collect::<Vec<Vec<&str>>>();
 
     let mut sum = 0usize;
+    let mut idx = 0;
     for pattern in patterns {
         for line in &pattern {
             println!("{}", line);
@@ -71,6 +91,7 @@ fn main() {
         let ref_horz = find_reflection_idx(&pattern, true);
         let ref_vert = find_reflection_idx(&pattern, false);
         if let (Some(vert), Some(horz)) = (ref_vert, ref_horz) {
+            println!("Axis: both");
             if vert.1 > horz.1 {
                 println!("Axis: vertical");
                 let val = vert.0 + 1;
@@ -97,10 +118,17 @@ fn main() {
                 sum += val;
             }
             else {
-                //panic!("No reflection found");
+                panic!("No reflection found");
             }
         }
         println!("---------------------");
+        /*
+        idx += 1;
+        if idx == 11 {
+            break;
+        }
+        */
+
     }
     println!("Sum = {}", sum);
 }
