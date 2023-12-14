@@ -2,7 +2,6 @@ use std::cell::RefCell;
 
 fn tilt(map: &mut Vec<RefCell<Vec<char>>>) {
     for row in 1..map.len()-1 {
-        println!("Starting on line {row}");
         for (idx, line) in map.iter().skip(row).enumerate() {
             for (col, ch) in line.borrow_mut().iter_mut().enumerate() {
                 if *ch != 'O' {
@@ -17,7 +16,6 @@ fn tilt(map: &mut Vec<RefCell<Vec<char>>>) {
                 if dst_row as usize == row + idx {
                     continue;
                 }
-                println!("Moving ({},{})->({},{})", col, row+idx, col, dst_row);
                 *map.get(dst_row as usize).unwrap().borrow_mut().get_mut(col).unwrap() = 'O';
                 *ch = '.';
             }
@@ -25,8 +23,17 @@ fn tilt(map: &mut Vec<RefCell<Vec<char>>>) {
     }
 }
 
+fn calc_load(map: &Vec<RefCell<Vec<char>>>) -> usize {
+    map
+        .iter()
+        .rev()
+        .enumerate()
+        .map(|(line_idx,l)| l.borrow().iter().filter(|&&ch| ch == 'O').count() * (line_idx + 1))
+        .sum()
+}
+
 fn main() {
-    let mut map = include_str!("../../input2.txt")
+    let mut map = include_str!("../../input.txt")
         .lines()
         .map(|l| RefCell::new(l.chars().collect::<Vec<char>>()))
         .collect::<Vec<RefCell<Vec<char>>>>(); 
@@ -37,6 +44,8 @@ fn main() {
         println!("{line}");
     }
 
+    println!("Load = {}", calc_load(&map));
+
 }
 
 #[cfg(test)]
@@ -44,7 +53,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_tilt() {
+    fn test_sample() {
         let input_str = r"O....#....
 O.OO#....#
 .....##...
@@ -80,5 +89,7 @@ O..#.OO...
                 acc.push_str(&x);
                 acc
             }));
+
+        assert_eq!(136, calc_load(&map));
     }
 }
