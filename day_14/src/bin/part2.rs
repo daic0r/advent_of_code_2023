@@ -1,4 +1,20 @@
 use std::{cell::RefCell, borrow::BorrowMut};
+use std::hash::{Hasher,Hash};
+use std::collections::hash_map::DefaultHasher;
+use std::collections::HashSet;
+
+fn map_builder(mut acc: String, x: String) -> String {
+    if !acc.is_empty() {
+        acc.push('\n');
+    }
+    acc.push_str(&x);
+    acc
+}
+
+fn string_from_map(map: &Vec<RefCell<Vec<char>>>) -> String {
+    map.iter().map(|l| l.borrow().iter().collect::<String>())
+        .fold(String::new(), map_builder)
+}
 
 fn transpose(map: Vec<RefCell<Vec<char>>>) -> Vec<RefCell<Vec<char>>> {
     let ret = map.clone();
@@ -34,7 +50,7 @@ fn tilt(map: &mut Vec<RefCell<Vec<char>>>) {
 }
 
 fn cycle(mut map: Vec<RefCell<Vec<char>>>) -> Vec<RefCell<Vec<char>>> {
-    for i in 0..4 {
+    for _ in 0..4 {
         tilt(&mut map);
         map = transpose(map);
     }
@@ -50,21 +66,49 @@ fn calc_load(map: &Vec<RefCell<Vec<char>>>) -> usize {
         .sum()
 }
 
+fn calculate_hash<T: Hash>(t: &T) -> u64 {
+    let mut s = DefaultHasher::new();
+    t.hash(&mut s);
+    s.finish()
+}
+
 fn main() {
-    let mut map = include_str!("../../input2.txt")
+    let mut map = include_str!("../../input.txt")
         .lines()
         .map(|l| RefCell::new(l.chars().collect::<Vec<char>>()))
         .collect::<Vec<RefCell<Vec<char>>>>(); 
 
+    println!("ORIGINAL MAP:");
     for line in map.iter().map(|l| l.borrow().iter().collect::<String>()) {
         println!("{line}");
     }
 
     println!();
-    map = cycle(map);
+    let mut hashes = HashSet::<(u64, usize)>::new();
+    let mut cycle_cnt = 0usize;
+    let mut tmp = map.clone();
+    let cycle_len;
+    let cycle_start;
+    println!("Trying to detect cycle...");
+    loop {
+        tmp = cycle(tmp);
+        cycle_cnt += 1;
+        let hash = calculate_hash(&string_from_map(&tmp));
+        if let Some(hash) = hashes.iter().find(|(h, _)| *h == hash) {
+            cycle_len = cycle_cnt - hash.1;
+            cycle_start = hash.1;
+            println!("Cycle of length {} starting at {} detected.", cycle_len, cycle_start);
+            break;
+        }
+        hashes.insert((hash, cycle_cnt));
+    };
 
-    for line in map.iter().map(|l| l.borrow().iter().collect::<String>()) {
-        println!("{line}");
+    let effective_cnt = (1_000_000_000 - cycle_start) % cycle_len;
+
+    println!("Number of times to run after entering cycle = {}", effective_cnt);
+
+    for i in 0..cycle_start+effective_cnt {
+        map = cycle(map);
     }
 
     println!("Load = {}", calc_load(&map));
@@ -74,14 +118,6 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn map_builder(mut acc: String, x: String) -> String {
-        if !acc.is_empty() {
-            acc.push('\n');
-        }
-        acc.push_str(&x);
-        acc
-    }
 
     #[test]
     fn test_sample() {
@@ -117,8 +153,7 @@ O..#.OO...
 ..O.......
 #....###..
 #....#....";
-        assert_eq!(exp_result, map.iter().map(|l| l.borrow().iter().collect::<String>())
-            .fold(String::new(), map_builder));
+        assert_eq!(exp_result, string_from_map(&map));
 
         assert_eq!(136, calc_load(&map));
     }
@@ -172,13 +207,10 @@ O.#..O.#.#
 #.OOO#...O";
 
         map = cycle(map);
-        assert_eq!(expect_cycle_1, map.iter().map(|l| l.borrow().iter().collect::<String>())
-            .fold(String::new(), map_builder));
+        assert_eq!(expect_cycle_1, string_from_map(&map));
         map = cycle(map);
-        assert_eq!(expect_cycle_2, map.iter().map(|l| l.borrow().iter().collect::<String>())
-            .fold(String::new(), map_builder));
+        assert_eq!(expect_cycle_2, string_from_map(&map));
         map = cycle(map);
-        assert_eq!(expect_cycle_3, map.iter().map(|l| l.borrow().iter().collect::<String>())
-            .fold(String::new(), map_builder));
+        assert_eq!(expect_cycle_3, string_from_map(&map));
     }
 }
