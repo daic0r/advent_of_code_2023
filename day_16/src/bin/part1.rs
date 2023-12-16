@@ -21,38 +21,55 @@ impl GridCell {
 }
 
 
-fn trace_beam(grid: &mut Grid, start: GridPos, move_dir: Vec2) -> Option<(GridPos, [Vec2; 2])> {
+fn trace_beam(grid: &mut Grid, start: GridPos, move_dir: Vec2, beam: usize) -> Option<(GridPos, [Vec2; 2])> {
     let mut cur_pos = start;
     let mut cur_dir = move_dir;
     loop {
+        grid[cur_pos.1][cur_pos.0].energized = true;
         let new_x = cur_pos.0.checked_add_signed(cur_dir.0);
         if new_x.is_none() || new_x.unwrap() > grid[0].len()-1 {
             if cfg!(feature="debug_output") {
-                println!("END: Leaving grid at {:?}+{:?}", cur_pos, cur_dir);
+                println!("BEAM {}, END: Leaving grid at {:?}+{:?}", beam, cur_pos, cur_dir);
             }
             break;
         }
         let new_y = cur_pos.1.checked_add_signed(cur_dir.1);
         if new_y.is_none() || new_y.unwrap() > grid.len()-1 {
             if cfg!(feature="debug_output") {
-                println!("END: Leaving grid at {:?}+{:?}", cur_pos, cur_dir);
+                println!("BEAM {}, END: Leaving grid at {:?}+{:?}", beam, cur_pos, cur_dir);
             }
             break;
         }
         cur_pos = (new_x.unwrap(), new_y.unwrap());
         let mut cur_cell = &mut grid[cur_pos.1][cur_pos.0];
+        cur_cell.energized = true; 
         match cur_cell.cell {
-            '.' => (),
+            '.' => 
+                if cfg!(feature="debug_output") {
+                    println!("BEAM {}, PASS THROUGH (.) => {:?}", beam, cur_pos);
+                }
+                else {
+                    ()
+                }
             '\\' => {
                 cur_dir = (cur_dir.1, cur_dir.0);
-                cur_cell.energized = true; 
+                if cfg!(feature="debug_output") {
+                    println!("BEAM {}, REFLECT (\\) => {:?} -> {:?}", beam, cur_pos, cur_dir);
+                }
+                else {
+                    ()
+                }
             },
             '/' => {
                 cur_dir = (-cur_dir.1, -cur_dir.0);
-                cur_cell.energized = true; 
+                if cfg!(feature="debug_output") {
+                    println!("BEAM {}, REFLECT (/) => {:?} -> {:?}", beam, cur_pos, cur_dir);
+                }
+                else {
+                    ()
+                }
             },
             '-' => {
-                cur_cell.energized = true; 
                 match cur_dir {
                     (1, 0) | (-1, 0) => (),
                     (0, 1) | (0, -1) => return Some((cur_pos, [(1, 0), (-1, 0)])), 
@@ -60,7 +77,6 @@ fn trace_beam(grid: &mut Grid, start: GridPos, move_dir: Vec2) -> Option<(GridPo
                 }
             },
             '|' => {
-                cur_cell.energized = true; 
                 match cur_dir {
                     (1, 0) | (-1, 0) => return Some((cur_pos, [(0, 1), (0, -1)])),
                     (0, 1) | (0, -1) => (), 
@@ -81,18 +97,20 @@ fn main() {
 
     let mut start_queue = VecDeque::from([((0usize, 0usize), (1isize, 0isize))]);
     let mut visited = vec![];
+    let mut beam = 0usize;
     while !start_queue.is_empty() {
         let start = start_queue.pop_front().unwrap();
         if visited.iter().position(|x: &((usize,usize),(isize,isize))| x.0 == start.0 && x.1 == start.1).is_some() {
             continue;
         }
-        let continuation = trace_beam(&mut grid, start.0, start.1);
+        let continuation = trace_beam(&mut grid, start.0, start.1, beam);
         visited.push(start);
         if let Some(c) = continuation {
             println!("SPLIT: ({:?}) <- {:?} -> ({:?})", c.1[0], c.0, c.1[1]);
             start_queue.push_back((c.0, c.1[0])); 
             start_queue.push_back((c.0, c.1[1])); 
         }
+        beam += 1;
     }
 
     for line in &grid {
