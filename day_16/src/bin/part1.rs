@@ -1,4 +1,4 @@
-use std::collections::{VecDeque, HashSet};
+use std::collections::VecDeque;
 
 type Grid = Vec<Vec<GridCell>>;
 type Vec2 = (isize, isize);
@@ -40,32 +40,23 @@ fn trace_beam(grid: &mut Grid, start: GridPos, move_dir: Vec2, beam: usize) -> O
             break;
         }
         cur_pos = (new_x.unwrap(), new_y.unwrap());
-        let mut cur_cell = &mut grid[cur_pos.1][cur_pos.0];
+        let cur_cell = &mut grid[cur_pos.1][cur_pos.0];
         cur_cell.energized = true; 
         match cur_cell.cell {
             '.' => 
                 if cfg!(feature="debug_output") {
                     println!("BEAM {}, PASS THROUGH (.) => {:?}", beam, cur_pos);
                 }
-                else {
-                    ()
-                }
             '\\' => {
                 cur_dir = (cur_dir.1, cur_dir.0);
                 if cfg!(feature="debug_output") {
                     println!("BEAM {}, REFLECT (\\) => {:?} -> {:?}", beam, cur_pos, cur_dir);
-                }
-                else {
-                    ()
                 }
             },
             '/' => {
                 cur_dir = (-cur_dir.1, -cur_dir.0);
                 if cfg!(feature="debug_output") {
                     println!("BEAM {}, REFLECT (/) => {:?} -> {:?}", beam, cur_pos, cur_dir);
-                }
-                else {
-                    ()
                 }
             },
             '-' => {
@@ -91,7 +82,7 @@ fn trace_beam(grid: &mut Grid, start: GridPos, move_dir: Vec2, beam: usize) -> O
 fn main() {
     let mut grid = include_str!("../../input.txt")
         .lines()
-        .map(|l| l.chars().map(|ch| GridCell::new(ch)).collect::<Vec<GridCell>>())
+        .map(|l| l.chars().map(GridCell::new).collect::<Vec<GridCell>>())
         .collect::<Vec<Vec<GridCell>>>();
 
     grid[0][0].energized = true;
@@ -100,7 +91,7 @@ fn main() {
     let mut beam = 0usize;
     while !start_queue.is_empty() {
         let start = start_queue.pop_front().unwrap();
-        if visited.iter().position(|x: &((usize,usize),(isize,isize))| x.0 == start.0 && x.1 == start.1).is_some() {
+        if visited.iter().any(|x| *x == start) {
             continue;
         }
         let continuation = trace_beam(&mut grid, start.0, start.1, beam);
