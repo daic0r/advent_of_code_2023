@@ -25,7 +25,6 @@ fn trace_beam(grid: &mut Grid, start: GridPos, move_dir: Vec2, beam: usize) -> O
     let mut cur_pos = start;
     let mut cur_dir = move_dir;
     loop {
-        grid[cur_pos.1][cur_pos.0].energized = true;
         let new_x = cur_pos.0.checked_add_signed(cur_dir.0);
         if new_x.is_none() || new_x.unwrap() > grid[0].len()-1 {
             if cfg!(feature="debug_output") {
@@ -90,11 +89,12 @@ fn trace_beam(grid: &mut Grid, start: GridPos, move_dir: Vec2, beam: usize) -> O
 }
 
 fn main() {
-    let mut grid = include_str!("../../input2.txt")
+    let mut grid = include_str!("../../input.txt")
         .lines()
         .map(|l| l.chars().map(|ch| GridCell::new(ch)).collect::<Vec<GridCell>>())
         .collect::<Vec<Vec<GridCell>>>();
 
+    grid[0][0].energized = true;
     let mut start_queue = VecDeque::from([((0usize, 0usize), (1isize, 0isize))]);
     let mut visited = vec![];
     let mut beam = 0usize;
