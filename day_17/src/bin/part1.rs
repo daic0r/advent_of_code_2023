@@ -1,4 +1,5 @@
 use std::collections::BinaryHeap;
+use std::io::Write;
 use std::ops::{Add,Sub};
 use std::cell::RefCell;
 
@@ -87,22 +88,27 @@ fn find_path(map: &Map) -> Option<Vec<Point>> {
     let start = Point(0usize, 0usize);
     let dest = Point(map.first().unwrap().len()-1, map.len()-1);
     let h = |coord: &Point| (std::cmp::max(coord.0, dest.0) - std::cmp::min(coord.0, dest.0)) + (std::cmp::max(coord.1, dest.1) - std::cmp::min(coord.1, dest.1));
-    let mut nodes = map
+    let nodes = map
         .iter()
         .enumerate()
-        .map(|(row_idx,row)| row.iter().enumerate().map(|(col_idx,col)| {
+        .map(|(row_idx,row)| row.iter().enumerate().map(|(col_idx,_)| {
                 let coord = Point(col_idx, row_idx);
-                let dist = h(&coord);
                 RefCell::new(Node::new(&coord))
         }).collect::<Vec<RefCell<Node>>>())
         .fold(vec![], |mut acc,row_vec| {
             acc.extend(row_vec);
             acc
         });
+    nodes.iter().enumerate().inspect(|(idx,node)| {
+        let y = idx / map.first().unwrap().len();
+        let x = idx % map.first().unwrap().len();
+        assert_eq!(Point(x,y), node.borrow().coord);
+    }).for_each(|_| {});
     {
         let mut start_node = nodes.iter().find(|n| n.borrow().coord == start).unwrap().borrow_mut();
         start_node.g_cost = 0;
         start_node.f_cost = h(&start);
+        println!("Start distance: {}", start_node.f_cost);
     }
 
     let mut last_dir = Vector(0,0);
@@ -125,6 +131,7 @@ fn find_path(map: &Map) -> Option<Vec<Point>> {
                 || neighbor.0.unwrap() > map.first().unwrap().len()-1
                     || neighbor.1.unwrap() > map.len()-1
                     || (*offset == last_dir && last_dir_cnt == 3)
+                    || (from.is_some() && from.unwrap().0 == neighbor.0.unwrap() && from.unwrap().1 == neighbor.1.unwrap())
             {
                 continue;
             }
@@ -140,7 +147,7 @@ fn find_path(map: &Map) -> Option<Vec<Point>> {
         let current = open_set.pop().unwrap(); 
         // Arrived at destination
         if current.borrow().coord == dest {
-            let mut ret = vec![];
+            let mut ret = vec![ dest ];
             let mut coord_cur = current.borrow().prev.clone();
             while let Some(cur) = coord_cur {
                 ret.push(cur.clone());
@@ -153,6 +160,9 @@ fn find_path(map: &Map) -> Option<Vec<Point>> {
 
         // Process neighbors
         for neighbor in get_neighbors(&current.borrow().coord, current.borrow().prev.as_ref()) {
+            if let Some(prev) = &current.borrow().prev {
+                assert!(*prev != neighbor);
+            }
             let g_cost = current.borrow().g_cost + map[neighbor.1][neighbor.0].to_digit(10).unwrap() as usize;
             let neighbor_node = nodes.iter().find(|n| n.borrow().coord == neighbor).unwrap();
             if g_cost < neighbor_node.borrow().g_cost {
@@ -179,10 +189,18 @@ fn main() {
     if path.is_none() {
         println!("No path found");
     } else if let Some(path) = path {
-        println!("Length of path: {}", path.len());
         for p in &path {
             println!("{:?}", p);
         }
+        let heat_loss = path.iter().map(|p| {
+            if p.1 != 0 || p.0 != 0 {
+                map[p.1][p.0].to_digit(10).unwrap() as usize
+            } else {
+                0
+            }
+        }).sum::<usize>();
+        println!("Length of path: {}", path.len());
+        println!("Heat loss = {}", heat_loss);
     }
 
 }
