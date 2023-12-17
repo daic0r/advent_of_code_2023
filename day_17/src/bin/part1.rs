@@ -1,4 +1,5 @@
-use std::collections::BTreeMap;
+use priority_queue::PriorityQueue;
+use std::cmp::Reverse;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 struct Node {
@@ -32,13 +33,60 @@ impl Node {
 
 type Map = Vec<Vec<char>>;
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 struct Point(usize, usize);
 
 #[derive(Debug, PartialEq, Eq)]
 struct Vector(isize, isize);
 
-const OFFSETS: [Vector; 4] = [ Vector(-1, 0), Vector(0, -1), Vector(1, 0), Vector(0, 1) ];
+//const OFFSETS: [Vector; 4] = [ Vector(-1, 0), Vector(0, -1), Vector(1, 0), Vector(0, 1) ];
+const OFFSETS: [Vector; 4] = [ Vector(1, 0), Vector(-1, 0), Vector(0, 1), Vector(0, -1)];
+
+
+fn check_forbidden_dir(my_node: &Node, nodes: &Vec<Node>) -> Option<Vector> {
+    let mut cur = my_node;
+    let mut last_dir = Vector(0, 0);
+    let mut last_dir_cnt = 0usize;
+    let mut steps = 0usize;
+    while let Some(from) = &cur.prev {
+        if steps >= 3 {
+            break;
+        }
+        let vec_from_last = Vector(cur.coord.0 as isize - from.0 as isize, cur.coord.1 as isize - from.1 as isize);
+        if vec_from_last == last_dir {
+            last_dir_cnt += 1;
+        } else {
+            last_dir = vec_from_last;
+            last_dir_cnt = 1;
+        }
+        cur = nodes.iter().find(|n| n.coord == *cur.prev.as_ref().unwrap()).unwrap();
+        steps += 1;
+    }
+    if last_dir_cnt >= 3 {
+        println!("Found forbidden!!!!");
+        Some(last_dir)
+    } else {
+        None
+    }
+}
+
+fn get_neighbors(my_node: &Node, map: &Map) -> Vec<Point> {
+    let mut ret = vec![];
+
+    for offset in &OFFSETS {
+        let neighbor = (my_node.coord.0.checked_add_signed(offset.0), my_node.coord.1.checked_add_signed(offset.1));
+        if neighbor.0.is_none() || neighbor.1.is_none()
+            || neighbor.0.unwrap() > map.first().unwrap().len()-1
+                || neighbor.1.unwrap() > map.len()-1
+                || (my_node.prev.is_some() && my_node.prev.as_ref().unwrap().0 == neighbor.0.unwrap() && my_node.prev.as_ref().unwrap().1 == neighbor.1.unwrap())
+        {
+            continue;
+        }
+        let neighbor = Point(neighbor.0.unwrap(),  neighbor.1.unwrap());
+        ret.push(neighbor);
+    }
+    ret
+}
 
 fn find_path(map: &Map) -> Option<Vec<Node>> {
     let start = Point(0usize, 0usize);
@@ -67,56 +115,11 @@ fn find_path(map: &Map) -> Option<Vec<Node>> {
         println!("Start distance: {}", start_node.f_cost);
     }
 
-    let get_neighbors = |my_node: &Node, nodes: &Vec<Node>| {
-        let mut ret = vec![];
+    let mut open_set = PriorityQueue::new();
+    open_set.push(start.clone(), Reverse(h(&start)));
 
-        for offset in &OFFSETS {
-            let neighbor = (my_node.coord.0.checked_add_signed(offset.0), my_node.coord.1.checked_add_signed(offset.1));
-            if neighbor.0.is_none() || neighbor.1.is_none()
-                || neighbor.0.unwrap() > map.first().unwrap().len()-1
-                    || neighbor.1.unwrap() > map.len()-1
-                    || (my_node.prev.is_some() && my_node.prev.as_ref().unwrap().0 == neighbor.0.unwrap() && my_node.prev.as_ref().unwrap().1 == neighbor.1.unwrap())
-            {
-                continue;
-            }
-            let neighbor = Point(neighbor.0.unwrap(),  neighbor.1.unwrap());
-            ret.push(neighbor);
-        }
-        ret
-    };
-    let check_forbidden_dir = |my_node: &Node, nodes: &Vec<Node>| {
-        let mut cur = my_node;
-        let mut last_dir = Vector(0, 0);
-        let mut last_dir_cnt = 0usize;
-        let mut steps = 0usize;
-        while let Some(from) = &cur.prev {
-            if steps >= 3 {
-                break;
-            }
-            let vec_from_last = Vector(cur.coord.0 as isize - from.0 as isize, cur.coord.1 as isize - from.1 as isize);
-            if vec_from_last == last_dir {
-                last_dir_cnt += 1;
-            } else {
-                last_dir = vec_from_last;
-                last_dir_cnt = 1;
-            }
-            cur = nodes.iter().find(|n| n.coord == *cur.prev.as_ref().unwrap()).unwrap();
-            steps += 1;
-        }
-        if last_dir_cnt >= 3 {
-            println!("Found forbidden!!!!");
-            Some(last_dir)
-        } else {
-            None
-        }
-    };
-
-    let mut f_costs = BTreeMap::new();
-    f_costs.insert(h(&start), vec![ start.clone() ]);
-
-    while !f_costs.is_empty() {
-        let first_key = f_costs.first_key_value().unwrap().0.clone();
-        let next_node = f_costs.get_mut(&first_key).unwrap().pop().unwrap();
+    while !open_set.is_empty() {
+        let next_node = open_set.pop().unwrap().0;
         let current = nodes
             .iter()
             .find(|n| { 
@@ -124,20 +127,17 @@ fn find_path(map: &Map) -> Option<Vec<Node>> {
             })
             .unwrap()
             .clone();
-        if f_costs.get(&first_key).unwrap().is_empty() {
-            f_costs.remove(&first_key);
-        }
 
         // Arrived at destination
         if current.coord == dest {
             let mut ret = vec![ current.clone() ];
-            let mut cur = current.prev;
-            while let Some(tmp) = cur {
-                let cur_node = nodes.iter().find(|n| n.coord == tmp).unwrap();
-                if tmp != start {
+            let mut cur = &current;
+            while let Some(tmp) = &cur.prev {
+                let cur_node = nodes.iter().find(|n| n.coord == *tmp).unwrap();
+                if *tmp != start {
                     ret.push(cur_node.clone());
                 }
-                cur = cur_node.prev.clone();
+                cur = cur_node;
             }
             ret.reverse();
             return Some(ret);
@@ -145,13 +145,13 @@ fn find_path(map: &Map) -> Option<Vec<Node>> {
 
         let forbidden = check_forbidden_dir(&current, &nodes);
         // Process neighbors
-        for neighbor in get_neighbors(&current, &nodes) {
+        for neighbor in get_neighbors(&current, &map) {
             if let Some(prev) = &current.prev {
                 assert!(*prev != neighbor);
             }
-            let dir_to_here = Vector(neighbor.0 as isize - current.coord.0 as isize, neighbor.1 as isize - current.coord.1 as isize);
+            let dir_to_neighbor = Vector(neighbor.0 as isize - current.coord.0 as isize, neighbor.1 as isize - current.coord.1 as isize);
             if let Some(forbidden) = &forbidden {
-                if dir_to_here == *forbidden
+                if dir_to_neighbor == *forbidden
                 {
                     println!("Skipped because forbidden!");
                     continue;
@@ -169,20 +169,15 @@ fn find_path(map: &Map) -> Option<Vec<Node>> {
                 neighbor_node.prev = Some(current.coord.clone());
                 neighbor_node.g_cost = g_cost;
                 neighbor_node.f_cost = g_cost + h(&neighbor);
-                neighbor_node.symbol = match dir_to_here {
+                neighbor_node.symbol = match dir_to_neighbor {
                     Vector(-1, 0) => Some('<'),
                     Vector(0, -1) => Some('^'),
                     Vector(1, 0) => Some('>'),
                     Vector(0, 1) => Some('v'),
                     _ => panic!("Shouldn't happen")
                 };
-                if !f_costs.iter().any(|kvp| kvp.1.contains(&neighbor))
-                {
-                    f_costs.entry(neighbor_node.f_cost)
-                        .and_modify(|v| { 
-                            v.push(neighbor.clone()) 
-                        })
-                        .or_insert(vec![ neighbor ]);
+                if !open_set.iter().any(|p| *p.0 == neighbor) {
+                    open_set.push(neighbor, Reverse(neighbor_node.f_cost));
                 }
             }
         }
