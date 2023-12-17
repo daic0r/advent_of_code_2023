@@ -1,8 +1,4 @@
 use std::collections::BTreeMap;
-use std::io::Write;
-use std::ops::{Add,Sub};
-use std::cell::RefCell;
-use std::io::stdin;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 struct Node {
@@ -10,18 +6,6 @@ struct Node {
     f_cost: usize,
     g_cost: usize,
     prev: Option<Point>
-}
-
-impl PartialOrd for Node {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        return Some(self.f_cost.cmp(&other.f_cost));
-    }
-}
-
-impl Ord for Node {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        return self.f_cost.cmp(&other.f_cost);
-    }
 }
 
 impl Node {
@@ -52,37 +36,6 @@ struct Point(usize, usize);
 #[derive(Debug, PartialEq, Eq)]
 struct Vector(isize, isize);
 
-impl Sub for Point {
-    type Output = Self;
-
-    fn sub(self, other: Self) -> Self::Output {
-        Self {
-            0: self.0 - other.0,
-            1: self.1 - other.1
-        }
-    }
-}
-impl Add<Vector> for Point {
-    type Output = Self;
-
-    fn add(self, other: Vector) -> Self::Output {
-        Self {
-            0: self.0.checked_add_signed(other.0).unwrap(),
-            1: self.1.checked_add_signed(other.1).unwrap()
-        }
-    }
-}
-impl Add for Vector {
-    type Output = Self;
-
-    fn add(self, other: Self) -> Self::Output {
-        Self {
-            0: self.0 + other.0,
-            1: self.1 + other.1
-        }
-    }
-}
-
 const OFFSETS: [Vector; 4] = [ Vector(-1, 0), Vector(0, -1), Vector(1, 0), Vector(0, 1) ];
 
 fn find_path(map: &Map) -> Option<Vec<Point>> {
@@ -106,35 +59,21 @@ fn find_path(map: &Map) -> Option<Vec<Point>> {
         assert_eq!(Point(x,y), node.coord);
     }).for_each(|_| {});
     {
-        let mut start_node = nodes.iter_mut().find(|n| n.coord == start).unwrap();
+        let start_node = nodes.iter_mut().find(|n| n.coord == start).unwrap();
         start_node.g_cost = 0;
         start_node.f_cost = h(&start);
         println!("Start distance: {}", start_node.f_cost);
     }
 
-    let mut last_dir = Vector(0,0);
-    let mut last_dir_cnt: usize = 0;
-    let mut get_neighbors = |coord: &Point, from: Option<&Point>| {
-        if let Some(from) = from {
-            let vec_from_last = Vector(coord.0 as isize - from.0 as isize, coord.1 as isize - from.1 as isize);
-            println!("POINT: {:?}, FROM: {:?}, VEC: {:?}", coord, from, vec_from_last);
-            println!();
-            if vec_from_last == last_dir {
-                last_dir_cnt += 1;
-            } else {
-                last_dir = vec_from_last;
-                last_dir_cnt = 0;
-            }
-        }
+    let get_neighbors = |my_node: &Node, nodes: &Vec<Node>| {
         let mut ret = vec![];
 
         for offset in &OFFSETS {
-            let neighbor = (coord.0.checked_add_signed(offset.0), coord.1.checked_add_signed(offset.1));
+            let neighbor = (my_node.coord.0.checked_add_signed(offset.0), my_node.coord.1.checked_add_signed(offset.1));
             if neighbor.0.is_none() || neighbor.1.is_none()
                 || neighbor.0.unwrap() > map.first().unwrap().len()-1
                     || neighbor.1.unwrap() > map.len()-1
-                    || (*offset == last_dir && last_dir_cnt == 3)
-                    || (from.is_some() && from.unwrap().0 == neighbor.0.unwrap() && from.unwrap().1 == neighbor.1.unwrap())
+                    || (my_node.prev.is_some() && my_node.prev.as_ref().unwrap().0 == neighbor.0.unwrap() && my_node.prev.as_ref().unwrap().1 == neighbor.1.unwrap())
             {
                 continue;
             }
@@ -143,7 +82,31 @@ fn find_path(map: &Map) -> Option<Vec<Point>> {
         }
         ret
     };
-
+    let check_forbidden_dir = |my_node: &Node, nodes: &Vec<Node>| {
+        let mut cur = my_node;
+        let mut last_dir = Vector(0, 0);
+        let mut last_dir_cnt = 0usize;
+        let mut steps = 0usize;
+        while let Some(from) = &cur.prev {
+            if steps == 3 {
+                break;
+            }
+            let vec_from_last = Vector(cur.coord.0 as isize - from.0 as isize, cur.coord.1 as isize - from.1 as isize);
+            if vec_from_last == last_dir {
+                last_dir_cnt += 1;
+            } else {
+                last_dir = vec_from_last;
+                last_dir_cnt = 0;
+            }
+            cur = nodes.iter().find(|n| n.coord == *cur.prev.as_ref().unwrap()).unwrap();
+            steps += 1;
+        }
+        if last_dir_cnt == 3 {
+            Some(last_dir)
+        } else {
+            None
+        }
+    };
 
     let mut f_costs = BTreeMap::new();
     f_costs.insert(h(&start), start);
@@ -162,19 +125,27 @@ fn find_path(map: &Map) -> Option<Vec<Point>> {
         if current.coord == dest {
             let mut ret = vec![ dest ];
             let mut coord_cur = current.prev.clone();
-            while let Some(cur) = coord_cur {
+            while let Some(cur) = &coord_cur {
                 ret.push(cur.clone());
-                let cur_node = nodes.iter().find(|n| n.coord == cur).unwrap();
+                let cur_node = nodes.iter().find(|n| n.coord == *cur).unwrap();
                 coord_cur = cur_node.prev.clone();
             }
             ret.reverse();
             return Some(ret);
         }
 
+        let forbidden = check_forbidden_dir(&current, &nodes);
         // Process neighbors
-        for neighbor in get_neighbors(&current.coord, current.prev.as_ref()) {
+        for neighbor in get_neighbors(&current, &nodes) {
             if let Some(prev) = &current.prev {
                 assert!(*prev != neighbor);
+            }
+            if let Some(forbidden) = &forbidden {
+                if Vector(neighbor.0 as isize - current.coord.0 as isize, neighbor.1 as isize - current.coord.1 as isize)
+                    == *forbidden
+                {
+                    continue;
+                }
             }
             if cfg!(feature="debug_output") {
                 //println!("CHECK: {:?}->{:?}", current, neighbor);
@@ -208,11 +179,9 @@ fn main() {
     if path.is_none() {
         println!("No path found");
     } else if let Some(path) = path {
-        /*
         for p in &path {
             println!("{:?}", p);
         }
-        */
         for (row_idx,row) in map.iter().enumerate() {
             for (col_idx,col) in row.iter().enumerate() {
                 if path.iter().any(|p| *p == Point(col_idx,row_idx)) {
