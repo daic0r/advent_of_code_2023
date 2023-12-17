@@ -1,9 +1,10 @@
-use std::collections::BinaryHeap;
+use std::collections::BTreeMap;
 use std::io::Write;
 use std::ops::{Add,Sub};
 use std::cell::RefCell;
+use std::io::stdin;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 struct Node {
     coord: Point,
     f_cost: usize,
@@ -88,13 +89,13 @@ fn find_path(map: &Map) -> Option<Vec<Point>> {
     let start = Point(0usize, 0usize);
     let dest = Point(map.first().unwrap().len()-1, map.len()-1);
     let h = |coord: &Point| (std::cmp::max(coord.0, dest.0) - std::cmp::min(coord.0, dest.0)) + (std::cmp::max(coord.1, dest.1) - std::cmp::min(coord.1, dest.1));
-    let nodes = map
+    let mut nodes = map
         .iter()
         .enumerate()
         .map(|(row_idx,row)| row.iter().enumerate().map(|(col_idx,_)| {
                 let coord = Point(col_idx, row_idx);
-                RefCell::new(Node::new(&coord))
-        }).collect::<Vec<RefCell<Node>>>())
+                Node::new(&coord)
+        }).collect::<Vec<Node>>())
         .fold(vec![], |mut acc,row_vec| {
             acc.extend(row_vec);
             acc
@@ -102,10 +103,10 @@ fn find_path(map: &Map) -> Option<Vec<Point>> {
     nodes.iter().enumerate().inspect(|(idx,node)| {
         let y = idx / map.first().unwrap().len();
         let x = idx % map.first().unwrap().len();
-        assert_eq!(Point(x,y), node.borrow().coord);
+        assert_eq!(Point(x,y), node.coord);
     }).for_each(|_| {});
     {
-        let mut start_node = nodes.iter().find(|n| n.borrow().coord == start).unwrap().borrow_mut();
+        let mut start_node = nodes.iter_mut().find(|n| n.coord == start).unwrap();
         start_node.g_cost = 0;
         start_node.f_cost = h(&start);
         println!("Start distance: {}", start_node.f_cost);
@@ -116,6 +117,8 @@ fn find_path(map: &Map) -> Option<Vec<Point>> {
     let mut get_neighbors = |coord: &Point, from: Option<&Point>| {
         if let Some(from) = from {
             let vec_from_last = Vector(coord.0 as isize - from.0 as isize, coord.1 as isize - from.1 as isize);
+            println!("POINT: {:?}, FROM: {:?}, VEC: {:?}", coord, from, vec_from_last);
+            println!();
             if vec_from_last == last_dir {
                 last_dir_cnt += 1;
             } else {
@@ -142,35 +145,51 @@ fn find_path(map: &Map) -> Option<Vec<Point>> {
     };
 
 
-    let mut open_set = BinaryHeap::from([ nodes.iter().find(|n| n.borrow().coord == start).unwrap() ]);
-    while !open_set.is_empty() {
-        let current = open_set.pop().unwrap(); 
+    let mut f_costs = BTreeMap::new();
+    f_costs.insert(h(&start), start);
+
+    while !f_costs.is_empty() {
+        let f_costs_first = f_costs.pop_first().unwrap();
+        let current = nodes
+            .iter()
+            .find(|n| { 
+                n.coord == f_costs_first.1
+            })
+            .unwrap()
+            .clone();
+
         // Arrived at destination
-        if current.borrow().coord == dest {
+        if current.coord == dest {
             let mut ret = vec![ dest ];
-            let mut coord_cur = current.borrow().prev.clone();
+            let mut coord_cur = current.prev.clone();
             while let Some(cur) = coord_cur {
                 ret.push(cur.clone());
-                let cur_node = nodes.iter().find(|n| n.borrow().coord == cur).unwrap();
-                coord_cur = cur_node.borrow().prev.clone();
+                let cur_node = nodes.iter().find(|n| n.coord == cur).unwrap();
+                coord_cur = cur_node.prev.clone();
             }
             ret.reverse();
             return Some(ret);
         }
 
         // Process neighbors
-        for neighbor in get_neighbors(&current.borrow().coord, current.borrow().prev.as_ref()) {
-            if let Some(prev) = &current.borrow().prev {
+        for neighbor in get_neighbors(&current.coord, current.prev.as_ref()) {
+            if let Some(prev) = &current.prev {
                 assert!(*prev != neighbor);
             }
-            let g_cost = current.borrow().g_cost + map[neighbor.1][neighbor.0].to_digit(10).unwrap() as usize;
-            let neighbor_node = nodes.iter().find(|n| n.borrow().coord == neighbor).unwrap();
-            if g_cost < neighbor_node.borrow().g_cost {
-                neighbor_node.borrow_mut().prev = Some(current.borrow().coord.clone());
-                neighbor_node.borrow_mut().g_cost = g_cost;
-                neighbor_node.borrow_mut().f_cost = g_cost + h(&neighbor);
-                if !open_set.iter().any(|n| n.borrow().coord == neighbor) {
-                    open_set.push(neighbor_node);
+            if cfg!(feature="debug_output") {
+                //println!("CHECK: {:?}->{:?}", current, neighbor);
+            }
+            let g_cost = current.g_cost + map[neighbor.1][neighbor.0].to_digit(10).unwrap() as usize;
+            let neighbor_node = nodes.iter_mut().find(|n| n.coord == neighbor).unwrap();
+            if g_cost < neighbor_node.g_cost {
+                if cfg!(feature="debug_output") {
+                    //println!("CHOSE: {:?} with edge weight {}", neighbor, map[neighbor.1][neighbor.0].to_digit(10).unwrap());
+                }
+                neighbor_node.prev = Some(current.coord.clone());
+                neighbor_node.g_cost = g_cost;
+                neighbor_node.f_cost = g_cost + h(&neighbor);
+                if !f_costs.iter().any(|kvp| *kvp.1 == neighbor) {
+                    f_costs.insert(neighbor_node.f_cost, neighbor);
                 }
             }
         }
@@ -189,8 +208,20 @@ fn main() {
     if path.is_none() {
         println!("No path found");
     } else if let Some(path) = path {
+        /*
         for p in &path {
             println!("{:?}", p);
+        }
+        */
+        for (row_idx,row) in map.iter().enumerate() {
+            for (col_idx,col) in row.iter().enumerate() {
+                if path.iter().any(|p| *p == Point(col_idx,row_idx)) {
+                    print!("X");
+                } else {
+                    print!("{}", map[row_idx][col_idx]);
+                }
+            }
+            println!();
         }
         let heat_loss = path.iter().map(|p| {
             if p.1 != 0 || p.0 != 0 {
