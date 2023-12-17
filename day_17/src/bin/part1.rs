@@ -112,17 +112,21 @@ fn find_path(map: &Map) -> Option<Vec<Node>> {
     };
 
     let mut f_costs = BTreeMap::new();
-    f_costs.insert(h(&start), start.clone());
+    f_costs.insert(h(&start), vec![ start.clone() ]);
 
     while !f_costs.is_empty() {
-        let f_costs_first = f_costs.pop_first().unwrap();
+        let first_key = f_costs.first_key_value().unwrap().0.clone();
+        let next_node = f_costs.get_mut(&first_key).unwrap().pop().unwrap();
         let current = nodes
             .iter()
             .find(|n| { 
-                n.coord == f_costs_first.1
+                n.coord == next_node
             })
             .unwrap()
             .clone();
+        if f_costs.get(&first_key).unwrap().is_empty() {
+            f_costs.remove(&first_key);
+        }
 
         // Arrived at destination
         if current.coord == dest {
@@ -172,8 +176,13 @@ fn find_path(map: &Map) -> Option<Vec<Node>> {
                     Vector(0, 1) => Some('v'),
                     _ => panic!("Shouldn't happen")
                 };
-                if !f_costs.iter().any(|kvp| *kvp.1 == neighbor) {
-                    f_costs.insert(neighbor_node.f_cost, neighbor);
+                if !f_costs.iter().any(|kvp| kvp.1.contains(&neighbor))
+                {
+                    f_costs.entry(neighbor_node.f_cost)
+                        .and_modify(|v| { 
+                            v.push(neighbor.clone()) 
+                        })
+                        .or_insert(vec![ neighbor ]);
                 }
             }
         }
@@ -193,7 +202,7 @@ fn main() {
         println!("No path found");
     } else if let Some(path) = path {
         for p in &path {
-            println!("{:?}", p);
+            println!("{:?}", p.coord);
         }
         for (row_idx,row) in map.iter().enumerate() {
             for (col_idx,col) in row.iter().enumerate() {
