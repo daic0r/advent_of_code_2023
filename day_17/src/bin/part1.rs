@@ -112,9 +112,6 @@ fn heat_loss(p: &Point, map: &Map) -> usize {
 }
 
 fn find_path(map: &Map) -> Option<Vec<Node>> {
-    assert!(heat_loss(&Point(0,0), &map) == 2);
-    assert!(heat_loss(&Point(3,1), &map) == 5);
-    assert!(heat_loss(&Point(5,12), &map) == 7);
 
     let start = Point(0usize, 0usize);
     let dest = Point(map.first().unwrap().len()-1, map.len()-1);
@@ -194,7 +191,7 @@ fn find_path(map: &Map) -> Option<Vec<Node>> {
 }
 
 fn main() {
-    let map = include_str!("../../input2.txt")
+    let map = include_str!("../../input.txt")
         .lines()
         .map(|l| l.chars().collect::<Vec<char>>())
         .collect::<Vec<Vec<char>>>();
