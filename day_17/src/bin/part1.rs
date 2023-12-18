@@ -3,17 +3,24 @@ use priority_queue::PriorityQueue;
 use std::cmp::Reverse;
 use std::collections::{VecDeque,HashMap};
 use std::fmt::{Display, Formatter};
+use std::hash::Hash;
 
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone)]
 struct Node {
     coord: Point,
     symbol: Option<char>,
-    prev: VecDeque<Node>
+    prev: (Option<Vector>, usize)
 }
 
 impl PartialEq for Node {
     fn eq(&self, other: &Self) -> bool {
         self.coord == other.coord && self.prev == other.prev
+    }
+}
+impl Hash for Node {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.coord.hash(state);
+        self.prev.hash(state);
     }
 }
 
@@ -24,7 +31,7 @@ impl Node {
         Self {
             coord: coord.clone(),
             symbol: None,
-            prev: VecDeque::new()
+            prev: (None, 0)
         }
     }
 }
@@ -52,7 +59,7 @@ impl Display for Point {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 struct Vector(isize, isize);
 
 //const OFFSETS: [Vector; 4] = [ Vector(-1, 0), Vector(0, -1), Vector(1, 0), Vector(0, 1) ];
@@ -90,17 +97,11 @@ fn check_forbidden_dir(my_node: &Node, nodes: &Vec<Node>) -> Option<Vector> {
 fn get_neighbors(my_node: &Node, map: &Map) -> Vec<Node> {
     let mut ret = vec![];
 
-    let mut forbidden_dir: Option<Vector> = None;
-    if !my_node.prev.is_empty() {
-        let last_dir = my_node.coord.sub(&my_node.prev.front().unwrap().coord);
-        forbidden_dir = Some(last_dir);
-        for (old,older) in my_node.prev.iter().tuple_windows() {
-            if old.coord.sub(&older.coord) != last_dir {
-                forbidden_dir = None;
-                break;
-            }
-        }
-    }
+    let forbidden_dir: Option<Vector> = if my_node.prev.1 == 3 {
+        my_node.prev.0
+    } else {
+        None
+    };
     if cfg!(feature="debug_output") {
         if (forbidden_dir.is_some()) {
             println!("Forbidden dir: {:?}", forbidden_dir);
@@ -112,16 +113,26 @@ fn get_neighbors(my_node: &Node, map: &Map) -> Vec<Node> {
         if neighbor.0.is_none() || neighbor.1.is_none()
             || neighbor.0.unwrap() > map.first().unwrap().len()-1
                 || neighbor.1.unwrap() > map.len()-1
-                || (!my_node.prev.is_empty() && my_node.prev.front().unwrap().coord.0 == neighbor.0.unwrap() && my_node.prev.front().unwrap().coord.1 == neighbor.1.unwrap())
+                || (my_node.prev.0.is_some() && my_node.prev.0.unwrap().0 == -offset.0 && my_node.prev.0.unwrap().1 == -offset.1)
                 || (forbidden_dir.is_some() && *offset == forbidden_dir.unwrap())
         {
+            if (my_node.prev.0.is_some() && my_node.prev.0.unwrap().0 == -offset.0 && my_node.prev.0.unwrap().1 == -offset.1) {
+                println!("Cannot go back");
+            }
             continue;
         }
         let mut neighbor_node = my_node.clone();
         neighbor_node.coord = Point(neighbor.0.unwrap(),  neighbor.1.unwrap());
-        neighbor_node.prev.push_front(my_node.clone());
-        if neighbor_node.prev.len() > 3 {
-            neighbor_node.prev.pop_back();
+        if let Some(prev) = &my_node.prev.0 {
+            if *prev != *offset {
+                neighbor_node.prev.0 = Some(*offset);
+                neighbor_node.prev.1 = 1;
+            } else {
+                neighbor_node.prev.1 += 1;
+            }
+        } else {
+            neighbor_node.prev.0 = Some(*offset);
+            neighbor_node.prev.1 = 1;
         }
         ret.push(neighbor_node);
     }
@@ -193,6 +204,7 @@ fn find_path(map: &Map) -> Option<Vec<Node>> {
                 if tmp.coord != start {
                     ret.push(tmp.clone());
                 }
+                cur = tmp;
             }
             //ret.reverse();
             return Some(ret);
@@ -201,7 +213,6 @@ fn find_path(map: &Map) -> Option<Vec<Node>> {
         //let forbidden = check_forbidden_dir(&current, &nodes);
         // Process neighbors
         for mut neighbor in get_neighbors(&current, &map) {
-            assert!(neighbor.prev.len() <= 3);
             /*
             if let Some(prev) =  current.prev.front() {
                 assert!(*prev != neighbor);
@@ -250,9 +261,9 @@ fn find_path(map: &Map) -> Option<Vec<Node>> {
                     println!("f: {}", f_costs[&neighbor]);
                     //println!("CHOSE: {:?} with edge weight {}", neighbor, map[neighbor.1][neighbor.0].to_digit(10).unwrap());
                 }
-                if !open_set.iter().any(|p| *p.0 == neighbor) {
+                //if !open_set.iter().any(|p| *p.0 == neighbor) {
                     open_set.push(neighbor.clone(), Reverse(f_costs[&neighbor]));
-                }
+                //}
             } else {
                 if cfg!(feature="debug_output") {
                     println!(" >= {}, ", g_costs[&neighbor]);
