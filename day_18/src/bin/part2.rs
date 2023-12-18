@@ -149,37 +149,28 @@ fn calc_area(instr: &Vec<Instruction>, map: &Vec<Vec<char>>) -> usize {
     let mut cur_height = map.len();
     let mut area = 1 * map.len();
 
-    let mut last_vert: Option<Direction> = None;
     for i in instr {
         match i.dig {
             Right(n) => {
                 cur_width += n;
                 let amount = n * cur_height;
-                match last_vert {
-                    Some(Down(_)) | None => area += amount,
-                    Some(Up(_)) => area += amount,
-                    _ => panic!("Impossible")
-                }
+                area += amount;
                 println!("Right: Width = {}, Height = {}, Area = {}", cur_width, cur_height, area);
             },
             Down(n) => {
                 cur_height -= n;
-                last_vert = Some(Down(n));
                 println!("Down: Width = {}, Height = {}, Area = {}", cur_width, cur_height, area);
             },
             Left(n) => {
                 cur_width -= n;
-                let amount = n * cur_height;
-                match last_vert {
-                    Some(Down(_)) | None => area -= amount,
-                    Some(Up(_)) => area -= amount,
-                    _ => panic!("Impossible")
-                }
+                println!("{} {}", n, cur_height);
+                // -1 cos we only need to subtract what's OUTSIDE!
+                let amount = (n) * (cur_height-1);
+                area -= amount;
                 println!("Left: Width = {}, Height = {}, Area = {}", cur_width, cur_height, area);
             },
             Up(n) => {
                 cur_height += n;
-                last_vert = Some(Up(n));
                 println!("Up: Width = {}, Height = {}, Area = {}", cur_width, cur_height, area);
             }
         }
