@@ -1,33 +1,37 @@
+use itertools::Itertools;
 use priority_queue::PriorityQueue;
 use std::cmp::Reverse;
+use std::collections::{VecDeque,HashMap};
+use std::fmt::{Display, Formatter};
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, Clone, Hash)]
 struct Node {
     coord: Point,
-    f_cost: usize,
-    g_cost: usize,
     symbol: Option<char>,
-    prev: Option<Point>
+    prev: VecDeque<Node>
 }
+
+impl PartialEq for Node {
+    fn eq(&self, other: &Self) -> bool {
+        self.coord == other.coord && self.prev == other.prev
+    }
+}
+
+impl Eq for Node {}
 
 impl Node {
     fn new(coord: &Point) -> Self {
         Self {
             coord: coord.clone(),
-            f_cost: usize::MAX,
-            g_cost: usize::MAX,
             symbol: None,
-            prev: None
+            prev: VecDeque::new()
         }
     }
+}
 
-    fn g_cost(&mut self, g: usize) -> &mut Self {
-        self.g_cost = g; 
-        self
-    }
-    fn f_cost(&mut self, f: usize) -> &mut Self {
-        self.f_cost = f;
-        self
+impl Display for Node {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Node({})", self.coord)
     }
 }
 
@@ -36,13 +40,26 @@ type Map = Vec<Vec<char>>;
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
 struct Point(usize, usize);
 
-#[derive(Debug, PartialEq, Eq)]
+impl Point {
+    fn sub(&self, other: &Self) -> Vector {
+        Vector(self.0 as isize - other.0 as isize, self.1 as isize - other.1 as isize)
+    }
+}
+
+impl Display for Point {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "({}, {})", self.0, self.1)
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 struct Vector(isize, isize);
 
 //const OFFSETS: [Vector; 4] = [ Vector(-1, 0), Vector(0, -1), Vector(1, 0), Vector(0, 1) ];
 const OFFSETS: [Vector; 4] = [ Vector(1, 0), Vector(-1, 0), Vector(0, 1), Vector(0, -1)];
 
 
+/*
 fn check_forbidden_dir(my_node: &Node, nodes: &Vec<Node>) -> Option<Vector> {
     let mut cur = my_node;
     let mut last_dir = Vector(0, 0);
@@ -59,39 +76,71 @@ fn check_forbidden_dir(my_node: &Node, nodes: &Vec<Node>) -> Option<Vector> {
             last_dir = vec_from_last;
             last_dir_cnt = 1;
         }
-        cur = nodes.iter().find(|n| n.coord == *cur.prev.as_ref().unwrap()).unwrap();
+        cur = nodes.iter().find(|n| n.coord == *from).unwrap();
         steps += 1;
     }
     if last_dir_cnt >= 3 {
-        println!("Found forbidden!!!!");
         Some(last_dir)
     } else {
         None
     }
 }
+*/
 
-fn get_neighbors(my_node: &Node, map: &Map) -> Vec<Point> {
+fn get_neighbors(my_node: &Node, map: &Map) -> Vec<Node> {
     let mut ret = vec![];
+
+    let mut forbidden_dir: Option<Vector> = None;
+    if !my_node.prev.is_empty() {
+        let last_dir = my_node.coord.sub(&my_node.prev.front().unwrap().coord);
+        forbidden_dir = Some(last_dir);
+        for (old,older) in my_node.prev.iter().tuple_windows() {
+            if old.coord.sub(&older.coord) != last_dir {
+                forbidden_dir = None;
+                break;
+            }
+        }
+    }
+    if cfg!(feature="debug_output") {
+        if (forbidden_dir.is_some()) {
+            println!("Forbidden dir: {:?}", forbidden_dir);
+        }
+    }
 
     for offset in &OFFSETS {
         let neighbor = (my_node.coord.0.checked_add_signed(offset.0), my_node.coord.1.checked_add_signed(offset.1));
         if neighbor.0.is_none() || neighbor.1.is_none()
             || neighbor.0.unwrap() > map.first().unwrap().len()-1
                 || neighbor.1.unwrap() > map.len()-1
-                || (my_node.prev.is_some() && my_node.prev.as_ref().unwrap().0 == neighbor.0.unwrap() && my_node.prev.as_ref().unwrap().1 == neighbor.1.unwrap())
+                || (!my_node.prev.is_empty() && my_node.prev.front().unwrap().coord.0 == neighbor.0.unwrap() && my_node.prev.front().unwrap().coord.1 == neighbor.1.unwrap())
+                || (forbidden_dir.is_some() && *offset == forbidden_dir.unwrap())
         {
             continue;
         }
-        let neighbor = Point(neighbor.0.unwrap(),  neighbor.1.unwrap());
-        ret.push(neighbor);
+        let mut neighbor_node = my_node.clone();
+        neighbor_node.coord = Point(neighbor.0.unwrap(),  neighbor.1.unwrap());
+        neighbor_node.prev.push_front(my_node.clone());
+        if neighbor_node.prev.len() > 3 {
+            neighbor_node.prev.pop_back();
+        }
+        ret.push(neighbor_node);
     }
     ret
 }
 
+fn heat_loss(p: &Point, map: &Map) -> usize {
+    map[p.1][p.0].to_digit(10).unwrap() as usize
+}
+
 fn find_path(map: &Map) -> Option<Vec<Node>> {
+    assert!(heat_loss(&Point(0,0), &map) == 2);
+    assert!(heat_loss(&Point(3,1), &map) == 5);
+    assert!(heat_loss(&Point(5,12), &map) == 7);
+
     let start = Point(0usize, 0usize);
     let dest = Point(map.first().unwrap().len()-1, map.len()-1);
     let h = |coord: &Point| (std::cmp::max(coord.0, dest.0) - std::cmp::min(coord.0, dest.0)) + (std::cmp::max(coord.1, dest.1) - std::cmp::min(coord.1, dest.1));
+    /*
     let mut nodes = map
         .iter()
         .enumerate()
@@ -108,18 +157,24 @@ fn find_path(map: &Map) -> Option<Vec<Node>> {
         let x = idx % map.first().unwrap().len();
         assert_eq!(Point(x,y), node.coord);
     }).for_each(|_| {});
-    {
-        let start_node = nodes.iter_mut().find(|n| n.coord == start).unwrap();
-        start_node.g_cost = 0;
-        start_node.f_cost = h(&start);
-        println!("Start distance: {}", start_node.f_cost);
-    }
+    */
+
+    let mut g_costs: HashMap<Node, usize> = HashMap::new();
+    let mut f_costs: HashMap<Node, usize> = HashMap::new();
+    let mut came_from: HashMap<Node, Node> = HashMap::new();
+
+    g_costs.insert(Node::new(&start), 0);
+    f_costs.insert(Node::new(&start),  h(&start));
 
     let mut open_set = PriorityQueue::new();
-    open_set.push(start.clone(), Reverse(h(&start)));
+    open_set.push(Node::new(&start), Reverse(h(&start)));
 
     while !open_set.is_empty() {
-        let next_node = open_set.pop().unwrap().0;
+        let current = open_set.pop().unwrap().0;
+        if cfg!(feature="debug_output") {
+            println!("({},{})", current.coord.0, current.coord.1);
+        }
+        /*
         let current = nodes
             .iter()
             .find(|n| { 
@@ -127,57 +182,81 @@ fn find_path(map: &Map) -> Option<Vec<Node>> {
             })
             .unwrap()
             .clone();
+        */
 
         // Arrived at destination
         if current.coord == dest {
             let mut ret = vec![ current.clone() ];
             let mut cur = &current;
-            while let Some(tmp) = &cur.prev {
-                let cur_node = nodes.iter().find(|n| n.coord == *tmp).unwrap();
-                if *tmp != start {
-                    ret.push(cur_node.clone());
+            while let Some(tmp) = came_from.get(cur) {
+                //let cur_node = nodes.iter().find(|n| n.coord == *tmp).unwrap();
+                if tmp.coord != start {
+                    ret.push(tmp.clone());
                 }
-                cur = cur_node;
             }
-            ret.reverse();
+            //ret.reverse();
             return Some(ret);
         }
 
-        let forbidden = check_forbidden_dir(&current, &nodes);
+        //let forbidden = check_forbidden_dir(&current, &nodes);
         // Process neighbors
-        for neighbor in get_neighbors(&current, &map) {
-            if let Some(prev) = &current.prev {
+        for mut neighbor in get_neighbors(&current, &map) {
+            assert!(neighbor.prev.len() <= 3);
+            /*
+            if let Some(prev) =  current.prev.front() {
                 assert!(*prev != neighbor);
             }
-            let dir_to_neighbor = Vector(neighbor.0 as isize - current.coord.0 as isize, neighbor.1 as isize - current.coord.1 as isize);
+            */
+            let dir_to_neighbor = neighbor.coord.sub(&current.coord);
+            /*
             if let Some(forbidden) = &forbidden {
                 if dir_to_neighbor == *forbidden
                 {
-                    println!("Skipped because forbidden!");
+                    println!("Skipped ({},{})", neighbor.0, neighbor.1);
                     continue;
                 }
             }
+            */
             if cfg!(feature="debug_output") {
-                //println!("CHECK: {:?}->{:?}", current, neighbor);
+                println!("\t: {}, {:?} ", neighbor.coord, neighbor.prev);
             }
-            let g_cost = current.g_cost + map[neighbor.1][neighbor.0].to_digit(10).unwrap() as usize;
-            let neighbor_node = nodes.iter_mut().find(|n| n.coord == neighbor).unwrap();
-            if g_cost < neighbor_node.g_cost {
+            let tentative_g_cost = g_costs.get(&current).unwrap() + heat_loss(&neighbor.coord, &map);
+            if cfg!(feature="debug_output") {
+                print!("g: {}", tentative_g_cost);
+            }
+            //let neighbor_node = nodes.iter_mut().find(|n| n.coord == neighbor).unwrap();
+            if tentative_g_cost < *g_costs.get(&neighbor).unwrap_or(&usize::MAX) {
                 if cfg!(feature="debug_output") {
+                    print!(" < {}, ", *g_costs.get(&neighbor).unwrap_or(&usize::MAX));
                     //println!("CHOSE: {:?} with edge weight {}", neighbor, map[neighbor.1][neighbor.0].to_digit(10).unwrap());
                 }
-                neighbor_node.prev = Some(current.coord.clone());
-                neighbor_node.g_cost = g_cost;
-                neighbor_node.f_cost = g_cost + h(&neighbor);
-                neighbor_node.symbol = match dir_to_neighbor {
+                /*
+                neighbor.prev.push_front(current.clone());
+                if neighbor.prev.len() > 3 {
+                    neighbor.prev.pop_back();
+                }
+                */
+                neighbor.symbol = match dir_to_neighbor {
                     Vector(-1, 0) => Some('<'),
                     Vector(0, -1) => Some('^'),
                     Vector(1, 0) => Some('>'),
                     Vector(0, 1) => Some('v'),
                     _ => panic!("Shouldn't happen")
                 };
+                g_costs.insert(neighbor.clone(), tentative_g_cost);
+                f_costs.insert(neighbor.clone(), tentative_g_cost + h(&neighbor.coord));
+                came_from.insert(neighbor.clone(), current.clone());
+                if cfg!(feature="debug_output") {
+                    println!("f: {}", f_costs[&neighbor]);
+                    //println!("CHOSE: {:?} with edge weight {}", neighbor, map[neighbor.1][neighbor.0].to_digit(10).unwrap());
+                }
                 if !open_set.iter().any(|p| *p.0 == neighbor) {
-                    open_set.push(neighbor, Reverse(neighbor_node.f_cost));
+                    open_set.push(neighbor.clone(), Reverse(f_costs[&neighbor]));
+                }
+            } else {
+                if cfg!(feature="debug_output") {
+                    println!(" >= {}, ", g_costs[&neighbor]);
+                    //println!("CHOSE: {:?} with edge weight {}", neighbor, map[neighbor.1][neighbor.0].to_digit(10).unwrap());
                 }
             }
         }
@@ -204,12 +283,12 @@ fn main() {
                 if let Some(node) = path.iter().find(|p| p.coord == Point(col_idx,row_idx)) {
                     print!("{}", node.symbol.unwrap());
                 } else {
-                    print!("{}", map[row_idx][col_idx]);
+                    print!("{}", heat_loss(&Point(col_idx, row_idx), &map));
                 }
             }
             println!();
         }
-        let heat_loss = path.iter().map(|p| map[p.coord.1][p.coord.0].to_digit(10).unwrap() as usize).sum::<usize>();
+        let heat_loss = path.iter().map(|p| heat_loss(&p.coord, &map)).sum::<usize>();
         println!("Length of path: {}", path.len());
         println!("Heat loss = {}", heat_loss);
     }
