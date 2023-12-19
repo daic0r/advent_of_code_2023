@@ -10,9 +10,28 @@ enum Rule {
     Reject
 }
 
-impl From<&str> for Rule {
+impl Rule {
+    fn process(&self, p: &Part) -> Option<&str> {
+        use Rule::*;
+        match self {
+            Accept => return Some("A"),
+            Reject => return Some("R"),
+            LessThan((cat,val,to)) => if p.categories[cat] < *val {
+                Some(to)
+            } else {
+                None
+            }
+            GreaterThan((cat,val,to)) => if p.categories[cat] > *val {
+                Some(to)
+            } else {
+                None
+            }
+        }
+    }
+}
+
+    impl From<&str> for Rule {
     fn from(value: &str) -> Self {
-        println!("Rule: {}", value);
         if value.len() == 1 {
             match value {
                 "A" => return Rule::Accept,
@@ -38,10 +57,10 @@ impl From<&str> for Rule {
 
 #[derive(Debug, Hash, Eq, PartialEq)]
 enum Category {
-    x,
-    m,
-    a,
-    s
+    X,
+    M,
+    A,
+    S
 }
 
 impl From<&str> for Category {
@@ -50,10 +69,10 @@ impl From<&str> for Category {
             panic!("Wrong length for Category");
         }
         match value {
-            "x" => Category::x,
-            "m" => Category::m,
-            "a" => Category::a,
-            "s" => Category::s,
+            "x" => Category::X,
+            "m" => Category::M,
+            "a" => Category::A,
+            "s" => Category::S,
             _ => panic!("Invalid Category string")
         }
     }
@@ -86,9 +105,19 @@ struct Workflow {
     final_dest: String
 }
 
+impl Workflow {
+    fn process(&self, p: &Part) -> &str {
+        for rule in &self.rules {
+            if let Some(to) = rule.process(p) {
+                return to;
+            }
+        }
+        self.final_dest.as_str()
+    }
+}
+
 impl From<&str> for Workflow {
     fn from(value: &str) -> Self {
-        println!("Parsing {}", value);
         let rex = Regex::new(r"([a-z]+)\{(.+)\}").unwrap();
         let cap = rex.captures(value).unwrap();
         let name = cap.get(1).unwrap().as_str();
@@ -116,7 +145,7 @@ impl Hash for Workflow {
 }
 
 fn main() {
-    let contents = include_str!("../../input2.txt");
+    let contents = include_str!("../../input.txt");
 
     let idx_separator = contents.lines().position(|l| l.is_empty()).unwrap();
 
@@ -133,13 +162,36 @@ fn main() {
         println!("{:?}", w);
     }
 
-    let mut parts = contents.lines()
+    let parts = contents.lines()
         .skip(idx_separator+1)
         .map(Part::from)
         .collect::<Vec<Part>>();
 
+    println!();
+
     for p in &parts {
         println!("{:?}", p);
     }
+
+    println!();
+
+    let mut accepted = vec![];
+    for p in &parts {
+        let mut cur_workflow = "in";
+        while cur_workflow != "A" && cur_workflow != "R" {
+            let workflow = workflows.get(cur_workflow).unwrap();
+            cur_workflow = workflow.process(p);
+        }
+        if cur_workflow == "A" {
+            accepted.push(p);
+        }
+    }
+
+    let sum = accepted
+        .iter()
+        .map(|&p| p.categories.values().sum::<u32>())
+        .sum::<u32>();
+
+    println!("Sum of accepted parts: {}", sum);
 
 }
