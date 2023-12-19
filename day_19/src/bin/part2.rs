@@ -1,0 +1,261 @@
+use std::collections::HashMap;
+use std::hash::Hash;
+use std::ops::{RangeBounds, RangeInclusive};
+use regex::Regex;
+use std::fmt::Display;
+
+#[derive(Debug)]
+enum Rule {
+    LessThan((Category,u32,String)),
+    GreaterThan((Category,u32,String)),
+    Accept,
+    Reject
+}
+
+impl Rule {
+    fn adapt_range(&self, coll: &mut PartCollection) -> Option<&str> {
+        use Rule::*;
+        match self {
+            Accept => return Some("A"),
+            Reject=> return Some("R"),
+            _ => {}
+        };
+        let range = match self {
+            LessThan((cat,val,to)) | GreaterThan((cat,val,to)) => {
+                coll.ranges.get_mut(cat).unwrap()
+            },
+            _ => panic!("Impossible")
+        };
+        let (my_range, to) = match self {
+            LessThan((cat,val,to)) => (1..=val-1, to),
+            GreaterThan((cat,val,to)) => (val+1..=4000, to),
+            _ => panic!("Impossible")
+        };
+        if range.start() < my_range.start() && range.end() < my_range.start() {
+            return None;
+        } else
+        if range.start() > my_range.end() && range.end() > my_range.end() {
+            return None;
+        }
+        *range = RangeInclusive::new(*std::cmp::max(range.start(), my_range.start()),
+            *std::cmp::min(range.end(), my_range.end()));
+
+        Some(to)
+    }
+}
+
+    impl From<&str> for Rule {
+    fn from(value: &str) -> Self {
+        if value.len() == 1 {
+            match value {
+                "A" => return Rule::Accept,
+                "R" => return Rule::Reject,
+                _ => panic!("Ooops")
+            }
+        }
+        let rex = Regex::new(r"([x,m,a,s])([<>])(\d+):([a-z]+|A|R)").unwrap();
+        let cap = rex.captures(value).unwrap();
+        let cat_str = cap.get(1).unwrap().as_str();
+        let op_str = cap.get(2).unwrap().as_str();
+        let val = cap.get(3).unwrap().as_str().parse::<u32>().unwrap();
+        let next = cap.get(4).unwrap().as_str();
+
+        let op_val_tup = (Category::from(cat_str), val, next.to_owned());
+        match op_str {
+            "<" => Rule::LessThan(op_val_tup),
+            ">" => Rule::GreaterThan(op_val_tup),
+            _ => panic!("Invalid operator string")
+        }
+    }
+}
+
+#[derive(Debug, Hash, Eq, PartialEq, Clone)]
+enum Category {
+    X,
+    M,
+    A,
+    S
+}
+
+impl From<&str> for Category {
+    fn from(value: &str) -> Self {
+        if value.len() != 1 {
+            panic!("Wrong length for Category");
+        }
+        match value {
+            "x" => Category::X,
+            "m" => Category::M,
+            "a" => Category::A,
+            "s" => Category::S,
+            _ => panic!("Invalid Category string")
+        }
+    }
+}
+
+#[derive(Debug)]
+struct Part {
+    categories: HashMap<Category, u32> 
+}
+
+impl From<&str> for Part {
+    fn from(value: &str) -> Self {
+        let mut categories = HashMap::new();
+        value[1..value.len()-1].split(",")
+            .map(|s| {
+                let val = s[2..].parse::<u32>().unwrap();
+                (Category::from(&s[0..1]), val)
+            })
+            .for_each(|(cat,val)| { categories.insert(cat, val); });
+        Self {
+            categories
+        }
+    }
+}
+
+#[derive(Debug)]
+struct Workflow {
+    name: String,
+    rules: Vec<Rule>,
+    final_dest: String
+}
+
+impl Workflow {
+    // fn process(&self, p: &Part) -> &str {
+    //     for rule in &self.rules {
+    //         if let Some(to) = rule.process(p) {
+    //             return to;
+    //         }
+    //     }
+    //     self.final_dest.as_str()
+    // }
+
+    fn rules(&self) -> &Vec<Rule> {
+        &self.rules
+    }
+
+    fn final_dest(&self) -> &str {
+        &self.final_dest
+    }
+}
+
+impl From<&str> for Workflow {
+    fn from(value: &str) -> Self {
+        let rex = Regex::new(r"([a-z]+)\{(.+)\}").unwrap();
+        let cap = rex.captures(value).unwrap();
+        let name = cap.get(1).unwrap().as_str();
+        let rules = cap.get(2).unwrap().as_str();
+        let rule_parts = rules
+            .split(",")
+            .collect::<Vec<&str>>();
+        
+        Self {
+            name: name.to_owned(),
+            rules: rule_parts
+                .iter()
+                .take(rule_parts.len()-1)
+                .map(|&s| Rule::from(s))
+                .collect(),
+            final_dest: rule_parts.last().unwrap().to_string()
+        }
+    }
+}
+
+impl Hash for Workflow {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.name.hash(state);
+    }
+}
+
+impl Display for PartCollection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let rng_x = &self.ranges[&Category::X];
+        let rng_m = &self.ranges[&Category::M];
+        let rng_a = &self.ranges[&Category::A];
+        let rng_s = &self.ranges[&Category::S];
+        f.write_fmt(format_args!("x: [{},{}], m: [{},{}], a: [{},{}], s: [{},{}]",
+            rng_x.start(), rng_x.end(),
+            rng_m.start(), rng_m.end(),
+            rng_a.start(), rng_a.end(),
+            rng_s.start(), rng_s.end()))
+    }
+}
+
+#[derive(Clone)]
+struct PartCollection {
+    ranges: HashMap<Category, std::ops::RangeInclusive<u32>>
+}
+
+impl PartCollection {
+    fn new() -> Self {
+        let mut ranges = HashMap::new();
+        ranges.insert(Category::X, 1..=4000);
+        ranges.insert(Category::M, 1..=4000);
+        ranges.insert(Category::A, 1..=4000);
+        ranges.insert(Category::S, 1..=4000);
+        Self {
+            ranges
+        }
+    }
+}
+
+fn get_combination_count(coll: &PartCollection) -> u128 {
+    coll.ranges.values().fold(1, |acc,x| acc * (x.end() - x.start() + 1) as u128)
+}
+fn fit_through(workflows: &HashMap<String, Workflow>) -> Vec<PartCollection> {
+    let mut ret = vec![];
+
+    let mut the_stack = vec![ ("in", PartCollection::new()) ];
+    while !the_stack.is_empty() {
+        let (wf_name, coll)  = the_stack.pop().unwrap();
+        println!("-> {}, {}", wf_name, coll);
+        if wf_name == "R" {
+            continue;
+        } else 
+        if wf_name == "A" {
+            ret.push(coll); 
+            continue;
+        }
+
+
+        let wf = workflows.get(wf_name).unwrap();
+        for rule in &wf.rules {
+            let mut this_coll = coll.clone();
+            let nxt = rule.adapt_range(&mut this_coll);
+            if let Some(nxt) = nxt {
+                if nxt == "A" {
+                    ret.push(this_coll);
+                } else {
+                    the_stack.push((nxt, this_coll));
+                }
+            }
+        }
+        the_stack.push((&wf.final_dest, coll.clone()));
+    }
+    ret
+}
+
+fn main() {
+    let contents = include_str!("../../input2.txt");
+
+    let idx_separator = contents.lines().position(|l| l.is_empty()).unwrap();
+
+    println!("Separator at {}", idx_separator);
+
+    let mut workflows: HashMap<String, Workflow> = HashMap::new();
+    contents
+        .lines()
+        .take(idx_separator)
+        .map(Workflow::from)
+        .for_each(|w| { workflows.insert(w.name.clone(), w); });
+        
+    for w in &workflows {
+        println!("{:?}", w);
+    }
+
+    println!();
+
+    let combos = fit_through(&workflows);
+    println!("Got {} ranges", combos.len()); 
+    let sum = combos.iter().fold(1, |acc,x| acc + get_combination_count(x));
+    println!("Number of combinations = {}", sum);
+}
