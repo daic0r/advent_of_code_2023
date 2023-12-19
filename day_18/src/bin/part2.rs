@@ -12,33 +12,42 @@ enum Direction {
 #[derive(Debug, Clone)]
 struct Instruction {
     dig: Direction,
-    color: String
 }
 
 impl Instruction {
     fn new(s: &str) -> Self {
         let rex = Regex::new(r"([R,D,L,U]) (\d+) \(#([a-f0-9]{6})\)").unwrap();
         let cap = rex.captures(s).unwrap();
-        let dir = cap.get(1).unwrap().as_str();
-        let num = cap.get(2).unwrap().as_str().parse::<usize>().unwrap();
+        // let dir = cap.get(1).unwrap().as_str();
+        // let num = cap.get(2).unwrap().as_str().parse::<usize>().unwrap();
+        // use Direction::*;
+        // Self {
+        //     dig: match dir {
+        //         "R" => Right(num),
+        //         "L" => Left(num),
+        //         "U" => Up(num),
+        //         "D" => Down(num),
+        //         _ => panic!("Invalid input")
+        //     },
+        // }
         let color = cap.get(3).unwrap().as_str();
+        let num = usize::from_str_radix(&color[..5], 16).unwrap();
         use Direction::*;
         Self {
-            dig: match dir {
-                "R" => Right(num),
-                "L" => Left(num),
-                "U" => Up(num),
-                "D" => Down(num),
+            dig: match &color[5..6] {
+                "0" => Right(num),
+                "1" => Down(num),
+                "2" => Left(num),
+                "3" => Up(num),
                 _ => panic!("Invalid input")
             },
-            color: color.to_owned()
         }
     }
 }
 
 type FieldDim = ((isize, isize), (isize,isize));
 
-fn get_dims(instr: &Vec<Instruction>) -> FieldDim {
+fn get_dims(instr: &Vec<Instruction>, vertices: &mut Vec<(isize,isize)>) -> FieldDim {
     use Direction::*;
     let mut min_x = isize::MAX;
     let mut max_x = isize::MIN;
@@ -46,6 +55,7 @@ fn get_dims(instr: &Vec<Instruction>) -> FieldDim {
     let mut max_y = isize::MIN;
     let mut x: isize = 0;
     let mut y: isize = 0;
+    vertices.push((x,y));
     for i in instr {
         //println!("At ({},{})", x, y);
         match i.dig {
@@ -58,125 +68,65 @@ fn get_dims(instr: &Vec<Instruction>) -> FieldDim {
         max_x = std::cmp::max(max_x, x);
         min_y = std::cmp::min(min_y, y);
         max_y = std::cmp::max(max_y, y);
+
+        vertices.push((x,y));
     }
     ((min_x, max_x), (min_y, max_y))
 }
 
-fn normalize_coord(coord: (isize, isize), dims: FieldDim) -> (usize, usize) {
-    ((coord.0 + dims.0.0.abs()) as usize, (coord.1 + dims.1.0.abs()) as usize)
-}
-
-fn draw_map(instr: &Vec<Instruction>, map: &mut Vec<Vec<char>>, dims: FieldDim) {
+fn calc_area(instr: &Vec<Instruction>, height: usize) -> u128 {
     use Direction::*;
 
-    let mut x = 0isize;
-    let mut y = 0isize;
-    for i in instr {
-        match i.dig {
-            Left(n) | Right(n) => {
-                //println!("{:?}", i.dig);
-                let step;
-                let to_x = if let Left(_) = i.dig {
-                    let tmp = x.checked_sub_unsigned(n).unwrap();
-                    step = -1isize;
-                    tmp
-                } else {
-                    let tmp = x.checked_add_unsigned(n).unwrap();
-                    step = 1isize;
-                    tmp
-                };
-                while x != to_x {
-                    let (tmp_x,tmp_y) = normalize_coord((x,y), dims);
-                    map[tmp_y][tmp_x] = '#'; 
-                    x = x.checked_add(step).unwrap();
-                }
-            },
-            Up(n) | Down(n) => {
-                //println!("{:?}", i.dig);
-                let step;
-                let to_y = if let Up(_) = i.dig {
-                    let tmp = y.checked_sub_unsigned(n).unwrap();
-                    step = -1isize;
-                    tmp
-                } else {
-                    let tmp = y.checked_add_unsigned(n).unwrap();
-                    step = 1isize;
-                    tmp
-                };
-                while y != to_y {
-                    let (tmp_x,tmp_y) = normalize_coord((x,y), dims);
-                    map[tmp_y][tmp_x] = '#'; 
-                    y = y.checked_add(step).unwrap();
-                }
-            },
-        };
+    let mut cur_height = height;
+    let mut area = (1 * height) as i128;
 
-    }
-}
-
-fn find_fill_start_point(map: &Vec<Vec<char>>) -> Option<(usize, usize)> {
-    for (line_idx,line) in map.iter().enumerate() {
-        let mut first = line.iter().position(|&c| c == '#').unwrap();
-        let last = line.iter().rposition(|&c| c == '#').unwrap();
-        while first < last {
-            if line[first] == '.' {
-                return Some((first, line_idx));
-            }
-            first += 1;
-        }
-    }
-    None
-}
-
-const OFFSETS: [(isize, isize); 8] = [
-    (-1, -1),
-    (0, -1),
-    (1, -1),
-    (-1, 0),
-    (1, 0),
-    (-1, 1),
-    (0, 1),
-    (1, 1)
-];
-
-fn calc_area(instr: &Vec<Instruction>, map: &Vec<Vec<char>>) -> usize {
-    use Direction::*;
-
-    let y = 0;
-    let x = map.first().unwrap().iter().position(|&ch| ch == '#').unwrap();
-
-    let mut cur_width = x + 1;
-    let mut cur_height = map.len();
-    let mut area = 1 * map.len();
+    let dir = match instr.first().unwrap().dig {
+        Left(_) => -1i128,
+        Right(_) => 1i128,
+        _ => panic!("Oops")
+    };
 
     for i in instr {
         match i.dig {
             Right(n) => {
-                cur_width += n;
-                let amount = n * cur_height;
-                area += amount;
-                println!("Right: Width = {}, Height = {}, Area = {}", cur_width, cur_height, area);
+                let amount = (n * cur_height) as i128;
+                println!("Right n = {}: Height: {}, Area: {}, amount = {}", n, cur_height, area, amount);
+                area = area.checked_add(dir * amount).unwrap();
             },
             Down(n) => {
                 cur_height -= n;
-                println!("Down: Width = {}, Height = {}, Area = {}", cur_width, cur_height, area);
+                println!("Down n = {}: Height: {}, Area: {}", n, cur_height, area);
             },
             Left(n) => {
-                cur_width -= n;
-                println!("{} {}", n, cur_height);
                 // -1 cos we only need to subtract what's OUTSIDE!
-                let amount = (n) * (cur_height-1);
-                area -= amount;
-                println!("Left: Width = {}, Height = {}, Area = {}", cur_width, cur_height, area);
+                let amount = (n * (cur_height-1)) as i128;
+                println!("Left n = {}: Height: {}, Area: {}, amount = {}", n, cur_height, area, amount);
+                area = area.checked_add(-dir * amount).unwrap();
             },
             Up(n) => {
                 cur_height += n;
-                println!("Up: Width = {}, Height = {}, Area = {}", cur_width, cur_height, area);
+                println!("Up n = {}: Height: {}, Area: {}", n, cur_height, area);
             }
         }
     }
 
-    area
+    area as u128
+}
+
+fn shoelace(vertices: &Vec<(isize,isize)>) -> usize {
+    let mut area = vertices
+        .windows(2)
+        .map(|p| (p[0].0*p[1].1 - p[0].1*p[1].0)
+            // Add edges
+            + (p[0].0 - p[1].0).abs() 
+            + (p[0].1 - p[1].1).abs())
+        .sum::<isize>();
+
+    area += (vertices.last().unwrap().0*vertices.first().unwrap().1 
+        - vertices.last().unwrap().1*vertices.first().unwrap().0).abs();
+
+    // Also add start pixel
+    (area / 2 + 1) as usize
 }
 
 fn print_map(map: &Vec<Vec<char>>) {
@@ -191,47 +141,29 @@ fn print_map(map: &Vec<Vec<char>>) {
 fn main() {
     use Direction::*;
 
-    let instr = include_str!("../../input2.txt")
+    let instr = include_str!("../../input.txt")
         .lines()
         .map(Instruction::new)
         .collect::<Vec<Instruction>>();
     
-    /*
     for i in &instr {
         println!("{:?}", i);
     }
-    */
 
-    let dims = get_dims(&instr);
+    let mut vertices: Vec<(isize,isize)> = Vec::new();
+
+    let dims = get_dims(&instr, &mut vertices);
     let ((min_x, max_x), (min_y, max_y)) = dims;
+    let width = (max_x + min_x.abs() + 1) as usize;
+    let height = (max_y + min_y.abs() + 1) as usize;
 
-    let mut map = std::iter::repeat(
-            Vec::from_iter(std::iter::repeat('.')
-                .take((max_x+min_x.abs()+1) as usize)
-                .collect::<Vec<char>>()
-            ))
-            .take((max_y+min_y.abs()+1) as usize)
-            .collect::<Vec<Vec<char>>>();
-
-    println!("{}x{} pixels", map.first().unwrap().len(), map.len());
-
-
-    draw_map(&instr, &mut map, dims);
+    println!("{}x{} pixels", width, height);
 
     println!();
 
-    //print_map(&map);
-
-    /*
-    let start = find_fill_start_point(&map);
-    println!("Start point: {:?}", start);
-
-    flood_fill(&mut map, start.unwrap());
-
-    println!("Done filling.");
-    print_map(&map);
-    */
-
-    let area = calc_area(&instr, &map);
+    for p in &vertices {
+        println!("({},{})", p.0, p.1);
+    }
+    let area = shoelace(&vertices);
     println!("Area: {}", area);
 }
