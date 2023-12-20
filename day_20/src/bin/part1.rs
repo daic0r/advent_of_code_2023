@@ -3,6 +3,30 @@ use std::any::Any;
 use std::cell::RefCell;
 use std::mem::{take,replace};
 
+macro_rules! module_boilerplate {
+    () => {
+        fn name(&self) -> &str {
+            &self.base.name
+        }
+
+        fn as_any(&self) -> &dyn Any {
+            self
+        }
+
+        fn get_base(&self) -> &BaseModule {
+            &self.base
+        }
+
+        fn get_base_mut(&mut self) -> &mut BaseModule {
+            &mut self.base
+        }
+
+        fn as_any_mut(&mut self) -> &mut dyn Any {
+            self 
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum Pulse {
     Low,
@@ -51,6 +75,8 @@ struct BroadcasterModule {
 }
 
 impl Module for FlipFlipModule {
+    module_boilerplate!();
+
     fn receive(&mut self, from: &str, p: Pulse, r: &mut ModuleRegistry) {
         if p == Pulse::High {
             return;
@@ -63,32 +89,15 @@ impl Module for FlipFlipModule {
         }
     }
 
-    fn name(&self) -> &str {
-        &self.base.name
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
 
     fn get_type(&self) -> ModuleType {
         ModuleType::FlipFlop
     }
-
-    fn get_base(&self) -> &BaseModule {
-        &self.base
-    }
-
-    fn get_base_mut(&mut self) -> &mut BaseModule {
-        &mut self.base
-    }
-
-    fn as_any_mut(&mut self) -> &mut dyn Any {
-        self 
-    }
 }
 
 impl Module for ConjunctionModule {
+    module_boilerplate!();
+
     fn receive(&mut self, from: &str, p: Pulse, r: &mut ModuleRegistry) {
         *self.last_received.get_mut(from).unwrap() = p;
         if self.last_received.iter().all(|(_,last_received)| *last_received == Pulse::High) {
@@ -98,58 +107,20 @@ impl Module for ConjunctionModule {
         }
     }
 
-    fn name(&self) -> &str {
-        &self.base.name
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn get_type(&self) -> ModuleType {
         ModuleType::Conjunction
-    }
-
-    fn get_base(&self) -> &BaseModule {
-        &self.base
-    }
-
-    fn get_base_mut(&mut self) -> &mut BaseModule {
-        &mut self.base
-    }
-
-    fn as_any_mut(&mut self) -> &mut dyn Any {
-        self
     }
 }
 
 impl Module for BroadcasterModule {
+    module_boilerplate!();
+
     fn receive(&mut self, from: &str, p: Pulse, r: &mut ModuleRegistry) {
         r.queue_message(self.name(), p, &self.base.dest_modules);
     }
 
-    fn name(&self) -> &str {
-        &self.base.name
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn get_type(&self) -> ModuleType {
         ModuleType::Broadcaster
-    }
-
-    fn get_base(&self) -> &BaseModule {
-        &self.base
-    }
-
-    fn get_base_mut(&mut self) -> &mut BaseModule {
-        &mut self.base
-    }
-
-    fn as_any_mut(&mut self) -> &mut dyn Any {
-        self
     }
 }
 
@@ -279,7 +250,7 @@ impl ModuleRegistry {
         while (!self.msg_queue.is_empty()) {
             let mut queue = take(&mut self.msg_queue);
             while let Some(msg) = queue.pop_front() {
-                println!("SENDING: {}->{}, {:?}", msg.0, msg.1, msg.2);
+                //println!("SENDING: {}->{}, {:?}", msg.0, msg.1, msg.2);
                 *self.msg_count.get_mut(&msg.2).unwrap() += 1;
                 let receiver = modules.get(&msg.1);
                 if let Some(receiver) = receiver {
@@ -317,32 +288,14 @@ impl ModuleRegistry {
 }
 
 impl Module for ModuleRegistry {
+    module_boilerplate!();
+
     fn receive(&mut self, from: &str, p: Pulse, reg: &mut ModuleRegistry) {
         unreachable!()
     }
 
-    fn name(&self) -> &str {
-        &self.base.name
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn get_type(&self) -> ModuleType {
         ModuleType::Registry
-    }
-
-    fn get_base(&self) -> &BaseModule {
-        &self.base
-    }
-
-    fn get_base_mut(&mut self) -> &mut BaseModule {
-        &mut self.base
-    }
-
-    fn as_any_mut(&mut self) -> &mut dyn Any {
-        self
     }
 }
 
@@ -350,7 +303,7 @@ impl Module for ModuleRegistry {
 fn main() {
     let mut reg = ModuleRegistry::new();
 
-    let contents = include_str!("../../input3.txt");
+    let contents = include_str!("../../input.txt");
     for line in contents.lines() {
         reg.add_module_from_str(line);
     }
@@ -362,7 +315,6 @@ fn main() {
 
     for i in 0..1000 {
         reg.push_button();
-        println!();
     }
 
     reg.print_stats();
