@@ -1,5 +1,7 @@
-use std::collections::HashMap;
+use std::collections::{VecDeque,HashMap};
 use std::any::Any;
+use std::cell::RefCell;
+use std::mem::{take,replace};
 
 #[derive(Debug, Clone, PartialEq)]
 enum Pulse {
@@ -17,7 +19,7 @@ enum ModuleType {
 
 trait Module {
     fn name(&self) -> &str;
-    fn receive(&mut self, from: &dyn Module, p: Pulse, r: &ModuleRegistry);
+    fn receive(&mut self, from: &str, p: Pulse, r: &mut ModuleRegistry);
     fn as_any(&self) -> &dyn Any;
     fn as_any_mut(&mut self) -> &mut dyn Any;
     fn get_type(&self) -> ModuleType;
@@ -49,15 +51,15 @@ struct BroadcasterModule {
 }
 
 impl Module for FlipFlipModule {
-    fn receive(&mut self, from: &dyn Module, p: Pulse, r: &ModuleRegistry) {
+    fn receive(&mut self, from: &str, p: Pulse, r: &mut ModuleRegistry) {
         if p == Pulse::High {
             return;
         }
         self.powered = !self.powered;
         if self.powered {
-            r.send(self, Pulse::High, &self.base.dest_modules);
+            r.queue_message(self.name(), Pulse::High, &self.base.dest_modules);
         } else {
-            r.send(self, Pulse::Low, &self.base.dest_modules);
+            r.queue_message(self.name(), Pulse::Low, &self.base.dest_modules);
         }
     }
 
@@ -87,8 +89,13 @@ impl Module for FlipFlipModule {
 }
 
 impl Module for ConjunctionModule {
-    fn receive(&mut self, from: &dyn Module, p: Pulse, r: &ModuleRegistry) {
-        *self.last_received.get_mut(from.name()).unwrap() = p;
+    fn receive(&mut self, from: &str, p: Pulse, r: &mut ModuleRegistry) {
+        *self.last_received.get_mut(from).unwrap() = p;
+        if self.last_received.iter().all(|(_,last_received)| *last_received == Pulse::High) {
+            r.queue_message(self.name(), Pulse::Low, &self.base.dest_modules);
+        } else {
+            r.queue_message(self.name(), Pulse::High, &self.base.dest_modules);
+        }
     }
 
     fn name(&self) -> &str {
@@ -117,8 +124,8 @@ impl Module for ConjunctionModule {
 }
 
 impl Module for BroadcasterModule {
-    fn receive(&mut self, from: &dyn Module, p: Pulse, r: &ModuleRegistry) {
-        todo!()
+    fn receive(&mut self, from: &str, p: Pulse, r: &mut ModuleRegistry) {
+        r.queue_message(self.name(), p, &self.base.dest_modules);
     }
 
     fn name(&self) -> &str {
@@ -148,7 +155,9 @@ impl Module for BroadcasterModule {
 
 struct ModuleRegistry {
     base: BaseModule,
-    pub modules: HashMap<String, Box<dyn Module>>
+    pub modules: HashMap<String, RefCell<Box<dyn Module>>>,
+    // (from, to, what pulse)
+    msg_queue: VecDeque<(String, String, Pulse)>
 }
 
 impl ModuleRegistry {
@@ -158,7 +167,8 @@ impl ModuleRegistry {
                 name: "Registry".to_string(),
                 dest_modules: vec![ "broadcaster".to_string() ]
             },
-            modules: HashMap::new()
+            modules: HashMap::new(),
+            msg_queue: VecDeque::new()
         }
     }
 
@@ -202,14 +212,15 @@ impl ModuleRegistry {
             _ => panic!("Invalid module name") 
         };
 
-        self.modules.insert(mod_name_formatted, module);
+        self.modules.insert(mod_name_formatted, RefCell::new(module));
     }
 
+    // Wire up conjunction modules with their senders
     fn initialize(&mut self) {
         let mut add_to_what = HashMap::new();
         for (mod_name, module) in &self.modules {
-            for rec_name in &module.get_base().dest_modules {
-                if (self.modules.get(rec_name).unwrap().get_type() == ModuleType::Conjunction) {
+            for rec_name in &module.borrow().get_base().dest_modules {
+                if (self.modules.get(rec_name).unwrap().borrow().get_type() == ModuleType::Conjunction) {
                     add_to_what.entry(rec_name.clone())
                         .and_modify(|v: &mut Vec<String>| v.push(mod_name.clone()))
                         .or_insert(vec![ mod_name.clone() ]);
@@ -217,9 +228,11 @@ impl ModuleRegistry {
             }
         }
         for (rec_name, senders) in &add_to_what {
-            let conj_module = &mut self.modules
+            let cell = &mut self.modules
                 .get_mut(rec_name)
                 .unwrap()
+                .borrow_mut();
+            let conj_module = cell
                 .as_any_mut()
                 .downcast_mut::<ConjunctionModule>()
                 .unwrap();
@@ -229,19 +242,59 @@ impl ModuleRegistry {
             }
         }
 
+        /*
+        for (rec_name, senders) in &add_to_what {
+            let conj_module = &self.modules
+                .get(rec_name)
+                .unwrap()
+                .as_any()
+                .downcast_ref::<ConjunctionModule>()
+                .unwrap();
+            for sender in &conj_module.last_received {
+                println!("{:?}", sender);
+            }
+        }
+        */
     }
 
 
-    fn send(&self, from: &dyn Module, p: Pulse, rec: &[String]) {
+    fn queue_message(&mut self, from: &str, p: Pulse, rec: &[String]) {
+        for r in rec {
+            //println!("QUEUED: {} -> {}, {:?}", from, r, p);
+            self.msg_queue.push_back((from.to_owned(), r.to_owned(), p.clone()));
+        }
+    }
+
+    fn send_messages(&mut self) {
+        let modules = take(&mut self.modules);
+        while (!self.msg_queue.is_empty()) {
+            let queue = take(&mut self.msg_queue);
+            for msg in &queue {
+                println!("SENDING: {}->{}, {:?}", msg.0, msg.1, msg.2);
+                let mut receiver = modules.get(&msg.1).unwrap().borrow_mut();
+                receiver.receive(
+                    &msg.0,
+                    msg.2.clone(),
+                    self
+                );
+            }
+        }
+        let _ = replace(&mut self.modules, modules);
     }
 
     fn push_button(&mut self) {
-
+        let name = self.name().to_owned();
+        self.queue_message(
+            &name, 
+            Pulse::Low, 
+            &[ "broadcaster".to_string() ]
+        );
+        self.send_messages();
     }
 }
 
 impl Module for ModuleRegistry {
-    fn receive(&mut self, from: &dyn Module, p: Pulse, reg: &ModuleRegistry) {
+    fn receive(&mut self, from: &str, p: Pulse, reg: &mut ModuleRegistry) {
         unreachable!()
     }
 
@@ -278,8 +331,11 @@ fn main() {
     for line in contents.lines() {
         reg.add_module_from_str(line);
     }
+    reg.initialize();
 
     for module in &reg.modules {
         println!("{}", module.0);
     }
+
+    reg.push_button();
 }
