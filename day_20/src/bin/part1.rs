@@ -3,7 +3,7 @@ use std::any::Any;
 use std::cell::RefCell;
 use std::mem::{take,replace};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum Pulse {
     Low,
     High
@@ -157,19 +157,25 @@ struct ModuleRegistry {
     base: BaseModule,
     pub modules: HashMap<String, RefCell<Box<dyn Module>>>,
     // (from, to, what pulse)
-    msg_queue: VecDeque<(String, String, Pulse)>
+    msg_queue: VecDeque<(String, String, Pulse)>,
+    msg_count: HashMap<Pulse, usize>
+    
 }
 
 impl ModuleRegistry {
     fn new() -> Self {
-        ModuleRegistry {
+        let mut ret = ModuleRegistry {
             base: BaseModule {
                 name: "Registry".to_string(),
                 dest_modules: vec![ "broadcaster".to_string() ]
             },
             modules: HashMap::new(),
-            msg_queue: VecDeque::new()
-        }
+            msg_queue: VecDeque::new(),
+            msg_count: HashMap::new()
+        };
+        ret.msg_count.insert(Pulse::Low, 0);
+        ret.msg_count.insert(Pulse::High, 0);
+        ret
     }
 
     fn add_module_from_str(&mut self, s: &str) {
@@ -220,10 +226,13 @@ impl ModuleRegistry {
         let mut add_to_what = HashMap::new();
         for (mod_name, module) in &self.modules {
             for rec_name in &module.borrow().get_base().dest_modules {
-                if (self.modules.get(rec_name).unwrap().borrow().get_type() == ModuleType::Conjunction) {
-                    add_to_what.entry(rec_name.clone())
-                        .and_modify(|v: &mut Vec<String>| v.push(mod_name.clone()))
-                        .or_insert(vec![ mod_name.clone() ]);
+                let receiver = self.modules.get(rec_name);
+                if let Some(receiver) = receiver {
+                    if (receiver.borrow().get_type() == ModuleType::Conjunction) {
+                        add_to_what.entry(rec_name.clone())
+                            .and_modify(|v: &mut Vec<String>| v.push(mod_name.clone()))
+                            .or_insert(vec![ mod_name.clone() ]);
+                    }
                 }
             }
         }
@@ -268,15 +277,18 @@ impl ModuleRegistry {
     fn send_messages(&mut self) {
         let modules = take(&mut self.modules);
         while (!self.msg_queue.is_empty()) {
-            let queue = take(&mut self.msg_queue);
-            for msg in &queue {
+            let mut queue = take(&mut self.msg_queue);
+            while let Some(msg) = queue.pop_front() {
                 println!("SENDING: {}->{}, {:?}", msg.0, msg.1, msg.2);
-                let mut receiver = modules.get(&msg.1).unwrap().borrow_mut();
-                receiver.receive(
-                    &msg.0,
-                    msg.2.clone(),
-                    self
-                );
+                *self.msg_count.get_mut(&msg.2).unwrap() += 1;
+                let receiver = modules.get(&msg.1);
+                if let Some(receiver) = receiver {
+                    receiver.borrow_mut().receive(
+                        &msg.0,
+                        msg.2.clone(),
+                        self
+                    );
+                }
             }
         }
         let _ = replace(&mut self.modules, modules);
@@ -290,6 +302,17 @@ impl ModuleRegistry {
             &[ "broadcaster".to_string() ]
         );
         self.send_messages();
+    }
+
+    fn print_stats(&self) {
+        println!("---------------------------------------");
+        println!("Low pulses sent: {}", self.msg_count[&Pulse::Low]);
+        println!("High pulses sent: {}", self.msg_count[&Pulse::High]);
+        println!("---------------------------------------");
+    }
+
+    fn get_result(&self) -> usize {
+        self.msg_count[&Pulse::Low] * self.msg_count[&Pulse::High]
     }
 }
 
@@ -327,7 +350,7 @@ impl Module for ModuleRegistry {
 fn main() {
     let mut reg = ModuleRegistry::new();
 
-    let contents = include_str!("../../input2.txt");
+    let contents = include_str!("../../input3.txt");
     for line in contents.lines() {
         reg.add_module_from_str(line);
     }
@@ -337,5 +360,12 @@ fn main() {
         println!("{}", module.0);
     }
 
-    reg.push_button();
+    for i in 0..1000 {
+        reg.push_button();
+        println!();
+    }
+
+    reg.print_stats();
+
+    println!("Result = {}", reg.get_result());
 }
