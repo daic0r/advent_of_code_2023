@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
+use std::cell::RefCell;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 struct Vec2d(i32,i32,i32);
 
 impl From<&str> for Vec2d {
@@ -14,7 +15,7 @@ impl From<&str> for Vec2d {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Default)]
 struct Extents {
     min: Vec2d,
     max: Vec2d
@@ -38,7 +39,7 @@ impl Extents {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Default)]
 struct Brick {
     name: Option<char>,
     extents: Extents 
@@ -75,8 +76,8 @@ enum ViewDirection {
     Side
 }
 
-fn print_bricks(bricks: &BTreeMap<usize, Vec<&Brick>>, view: ViewDirection) {
-    let max_z = *bricks.last_key_value().unwrap().0;
+fn print_bricks(map: &BTreeMap<usize, RefCell<Vec<usize>>>, bricks: &Vec<Brick>, view: ViewDirection) {
+    let max_z = *map.last_key_value().unwrap().0;
     match view {
         ViewDirection::Front => {
             println!(" x ");
@@ -86,36 +87,36 @@ fn print_bricks(bricks: &BTreeMap<usize, Vec<&Brick>>, view: ViewDirection) {
         }
     }
     println!("012");
-    for z in (0usize..=max_z).rev() {
-        if !bricks.contains_key(&z) {
+    for z in (1usize..=max_z).rev() {
+        if !map.contains_key(&z) {
             println!("... {}", z);
             continue;
         }
-        let mut z_container: Vec<&Brick> = bricks[&z].clone();
+        let mut z_container = map[&z].borrow().clone();
         match view {
             ViewDirection::Front => {
-                z_container.sort_by_key(|b| b.extents.min.1);
+                z_container.sort_by_key(|&b| bricks[b].extents.min.1);
             },
             ViewDirection::Side => {
-                z_container.sort_by_key(|b| b.extents.min.0);
+                z_container.sort_by_key(|&b| bricks[b].extents.min.0);
             }
 
         }
         for i in 0..3i32 {
             match view {
                 ViewDirection::Front => {
-                    for brick in &z_container {
-                        if i >= brick.extents.min.0 && i <= brick.extents.max.0 {
-                            print!("{}", brick.name.unwrap());
+                    for &brick in z_container.iter() {
+                        if i >= bricks[brick].extents.min.0 && i <= bricks[brick].extents.max.0 {
+                            print!("{}", bricks[brick].name.unwrap());
                         } else {
                             print!(".");
                         }
                     }
                 },
                 ViewDirection::Side => {
-                    for brick in &z_container {
-                        if i >= brick.extents.min.1 && i <= brick.extents.max.1 {
-                            print!("{}", brick.name.unwrap());
+                    for &brick in z_container.iter() {
+                        if i >= bricks[brick].extents.min.1 && i <= bricks[brick].extents.max.1 {
+                            print!("{}", bricks[brick].name.unwrap());
                         } else {
                             print!(".");
                         }
@@ -124,6 +125,31 @@ fn print_bricks(bricks: &BTreeMap<usize, Vec<&Brick>>, view: ViewDirection) {
             }
         }
         println!(" {}", z);
+    }
+}
+
+fn drop_pieces(map: &mut BTreeMap<usize, RefCell<Vec<usize>>>, bricks: &Vec<Brick>) {
+    let max_z = *map.last_key_value().unwrap().0;
+    for (top_row,bottom_row) in map.iter().rev().zip(map.iter().rev().skip(1)) {
+        let mut src = top_row.1.borrow_mut();
+        let mut dst = bottom_row.1.borrow_mut();
+        let mut del = vec![];
+        for (idx,&b1) in src.iter().enumerate() {
+            let mut intersect = false;
+            for &b2 in dst.iter() {
+                if bricks[b2].intersects(&bricks[b1]) {
+                    intersect = true;
+                    break;
+                }
+            }
+            if !intersect {
+                dst.push(b1);
+                del.push(b1);
+            }
+        }
+        for d in del {
+            src.retain(|&b| b != d);
+        }
     }
 }
 
@@ -147,14 +173,14 @@ fn main() {
 
     bricks.sort_by_key(|b| b.extents.min.2);
 
-    let mut brick_levels: BTreeMap<usize, Vec<&Brick>> = BTreeMap::new();
-    for brick in &bricks {
+    let mut brick_levels: BTreeMap<usize, RefCell<Vec<usize>>> = BTreeMap::new();
+    for (idx,brick) in bricks.iter().enumerate() {
         for i in brick.extents.min.2 as usize..=brick.extents.max.2 as usize {
             brick_levels.entry(i)
                 .and_modify(|v| { 
-                    v.push(brick);
+                    v.borrow_mut().push(idx);
                 })
-                .or_insert(vec![ brick ]);
+                .or_insert(RefCell::new(vec![idx]));
         }
     }
 
@@ -163,7 +189,9 @@ fn main() {
     }
     //println!("{:?}", brick_levels);
 
-    print_bricks(&brick_levels, ViewDirection::Front);
-    print_bricks(&brick_levels, ViewDirection::Side);
+    drop_pieces(&mut brick_levels, &bricks);
+
+    print_bricks(&brick_levels, &bricks, ViewDirection::Front);
+    print_bricks(&brick_levels, &bricks, ViewDirection::Side);
 
 }
