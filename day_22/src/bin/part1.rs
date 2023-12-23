@@ -256,4 +256,18 @@ fn main() {
         println!();
     }
 
+    let num_disintegratable = bricks
+        .iter()
+        .enumerate()
+        .fold(0, |acc,(idx,b)| {
+            let where_am_i_cnt = bricks.iter().filter(|&this_brick| this_brick.deref().borrow().rests_on.contains(&idx)).count();
+            let participation_cont_brick_cnt = bricks
+                .iter()
+                .filter(|&this_brick| this_brick.deref().borrow().rests_on.contains(&idx))
+                .map(|this_brick| this_brick.deref().borrow().rests_on.len())
+                .sum::<usize>();
+            acc + ((where_am_i_cnt == 0 || participation_cont_brick_cnt >= 2*where_am_i_cnt) as usize)
+        });
+
+    println!("Disintegratable: {}", num_disintegratable);
 }
