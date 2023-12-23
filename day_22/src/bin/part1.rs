@@ -1,5 +1,7 @@
+use std::borrow::BorrowMut;
 use std::collections::BTreeMap;
 use std::cell::RefCell;
+use std::ops::Deref;
 
 #[derive(Debug, Clone, Copy, Default)]
 struct Vec2d(i32,i32,i32);
@@ -60,6 +62,13 @@ impl Brick {
     fn intersects(&self, rhs: &Brick) -> bool {
         self.extents.intersects(&rhs.extents)
     }
+
+    fn lower(&self) -> Brick {
+        let mut ret = self.clone();
+        ret.extents.min.2 -= 1;
+        ret.extents.max.2 -= 1;
+        ret
+    }
 }
 
 impl From<&str> for Brick {
@@ -76,7 +85,7 @@ enum ViewDirection {
     Side
 }
 
-fn print_bricks(map: &BTreeMap<usize, RefCell<Vec<usize>>>, bricks: &Vec<Brick>, view: ViewDirection) {
+fn print_bricks(map: &BTreeMap<usize, RefCell<Vec<usize>>>, bricks: &Vec<RefCell<Brick>>, view: ViewDirection) {
     let max_z = *map.last_key_value().unwrap().0;
     match view {
         ViewDirection::Front => {
@@ -95,30 +104,56 @@ fn print_bricks(map: &BTreeMap<usize, RefCell<Vec<usize>>>, bricks: &Vec<Brick>,
         let mut z_container = map[&z].borrow().clone();
         match view {
             ViewDirection::Front => {
-                z_container.sort_by_key(|&b| bricks[b].extents.min.1);
+                z_container.sort_by_key(|&b| bricks[b].borrow().extents.min.1);
             },
             ViewDirection::Side => {
-                z_container.sort_by_key(|&b| bricks[b].extents.min.0);
+                z_container.sort_by_key(|&b| bricks[b].borrow().extents.min.0);
             }
 
         }
         for i in 0..3i32 {
             match view {
                 ViewDirection::Front => {
-                    for &brick in z_container.iter() {
-                        if i >= bricks[brick].extents.min.0 && i <= bricks[brick].extents.max.0 {
-                            print!("{}", bricks[brick].name.unwrap());
-                        } else {
-                            print!(".");
+                    let brick_count = z_container
+                        .iter()
+                        .filter(|&&brick| i >= bricks[brick].borrow().extents.min.0 && i <= bricks[brick].borrow().extents.max.0)
+                        .count();
+                    if brick_count > 1
+                    {
+                        print!("?");
+                    } 
+                    else 
+                    if brick_count == 0 {
+                        print!(".");
+                    }
+                    else
+                    {
+                        let brick_idx = z_container.iter().find(|&&brick| i >= bricks[brick].borrow().extents.min.0 && i <= bricks[brick].borrow().extents.max.0).unwrap();
+                        let brick = bricks[*brick_idx].borrow();
+                        if i >= brick.extents.min.0 && i <= brick.extents.max.0 {
+                            print!("{}", brick.name.unwrap());
                         }
                     }
                 },
                 ViewDirection::Side => {
-                    for &brick in z_container.iter() {
-                        if i >= bricks[brick].extents.min.1 && i <= bricks[brick].extents.max.1 {
-                            print!("{}", bricks[brick].name.unwrap());
-                        } else {
-                            print!(".");
+                    let brick_count = z_container
+                        .iter()
+                        .filter(|&&brick| i >= bricks[brick].borrow().extents.min.1 && i <= bricks[brick].borrow().extents.max.1)
+                        .count();
+                    if brick_count > 1
+                    {
+                        print!("?");
+                    } 
+                    else 
+                    if brick_count == 0 {
+                        print!(".");
+                    }
+                    else
+                    {
+                        let brick_idx = z_container.iter().find(|&&brick| i >= bricks[brick].borrow().extents.min.1 && i <= bricks[brick].borrow().extents.max.1).unwrap();
+                        let brick = bricks[*brick_idx].borrow();
+                        if i >= brick.extents.min.1 && i <= brick.extents.max.1 {
+                            print!("{}", brick.name.unwrap());
                         }
                     }
                 }
@@ -128,28 +163,42 @@ fn print_bricks(map: &BTreeMap<usize, RefCell<Vec<usize>>>, bricks: &Vec<Brick>,
     }
 }
 
-fn drop_pieces(map: &mut BTreeMap<usize, RefCell<Vec<usize>>>, bricks: &Vec<Brick>) {
+fn drop_pieces(map: &mut BTreeMap<usize, RefCell<Vec<usize>>>, bricks: &mut Vec<RefCell<Brick>>) {
     let max_z = *map.last_key_value().unwrap().0;
-    for (top_row,bottom_row) in map.iter().rev().zip(map.iter().rev().skip(1)) {
-        let mut src = top_row.1.borrow_mut();
-        let mut dst = bottom_row.1.borrow_mut();
-        let mut del = vec![];
-        for (idx,&b1) in src.iter().enumerate() {
+    for (idx,brick) in bricks.iter().enumerate() {
+        loop {
+            if brick.borrow().extents.min.2 < 2 {
+                break;
+            }
+            let new_level = brick.borrow().extents.min.2 as usize-1usize;
+            println!("{}", new_level);
+            if !map.contains_key(&new_level) {
+                map.insert(new_level, RefCell::new(vec![]));
+            }
+            let mut dst = map[&new_level].borrow_mut();
             let mut intersect = false;
             for &b2 in dst.iter() {
-                if bricks[b2].intersects(&bricks[b1]) {
+                if bricks[b2].borrow().intersects(&brick.borrow().lower()) {
                     intersect = true;
                     break;
                 }
             }
             if !intersect {
-                dst.push(b1);
-                del.push(b1);
+                // Remove from old maximum level
+                let map_entry = &map[&(brick.borrow().extents.max.2 as usize)];
+                let pos = map_entry.borrow().iter().position(|&b| b == idx).unwrap();
+                map_entry.borrow_mut().remove(pos);
+
+                // Add to new minimum level
+                dst.push(idx);
+
+                let lowered = brick.borrow().lower();
+                *brick.borrow_mut() = lowered;
+            } else {
+                break;
             }
         }
-        for d in del {
-            src.retain(|&b| b != d);
-        }
+         
     }
 }
 
@@ -167,18 +216,18 @@ fn main() {
             max_z = std::cmp::max(ret.extents.max.2, max_z);
             ret.name = Some(next_name);
             next_name = char::from_u32(u32::from(next_name) + 1).unwrap();
-            ret
+            RefCell::new(ret)
         })
         .collect::<Vec<_>>();
 
-    bricks.sort_by_key(|b| b.extents.min.2);
+    bricks.sort_by_key(|b| b.borrow().extents.min.2);
 
     let mut brick_levels: BTreeMap<usize, RefCell<Vec<usize>>> = BTreeMap::new();
     for (idx,brick) in bricks.iter().enumerate() {
-        for i in brick.extents.min.2 as usize..=brick.extents.max.2 as usize {
+        for i in brick.borrow().extents.min.2 as usize..=brick.borrow().extents.max.2 as usize {
             brick_levels.entry(i)
                 .and_modify(|v| { 
-                    v.borrow_mut().push(idx);
+                    v.deref().borrow_mut().push(idx);
                 })
                 .or_insert(RefCell::new(vec![idx]));
         }
@@ -187,9 +236,9 @@ fn main() {
     for b in &bricks {
         println!("{:?}", b);
     }
-    //println!("{:?}", brick_levels);
+    println!("{:?}", brick_levels);
 
-    drop_pieces(&mut brick_levels, &bricks);
+    drop_pieces(&mut brick_levels, &mut bricks);
 
     print_bricks(&brick_levels, &bricks, ViewDirection::Front);
     print_bricks(&brick_levels, &bricks, ViewDirection::Side);
