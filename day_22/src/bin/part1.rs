@@ -207,7 +207,7 @@ fn drop_pieces(map: &mut BTreeMap<usize, RefCell<Vec<usize>>>, bricks: &mut Vec<
 
 
 fn main() {
-    let content = std::fs::read_to_string("input2.txt").unwrap();
+    let content = std::fs::read_to_string("input.txt").unwrap();
 
     let mut next_name = 'A';
 
@@ -247,6 +247,7 @@ fn main() {
     println!();
     print_bricks(&brick_levels, &bricks, ViewDirection::Side);
 
+    /*
     println!();
     for b in &bricks {
         print!("{} rests on ", b.borrow().name.unwrap());
@@ -255,18 +256,18 @@ fn main() {
         }
         println!();
     }
+    */
 
     let num_disintegratable = bricks
         .iter()
         .enumerate()
         .fold(0, |acc,(idx,b)| {
             let where_am_i_cnt = bricks.iter().filter(|&this_brick| this_brick.deref().borrow().rests_on.contains(&idx)).count();
-            let participation_cont_brick_cnt = bricks
+            let never_only_support  = bricks
                 .iter()
                 .filter(|&this_brick| this_brick.deref().borrow().rests_on.contains(&idx))
-                .map(|this_brick| this_brick.deref().borrow().rests_on.len())
-                .sum::<usize>();
-            acc + ((where_am_i_cnt == 0 || participation_cont_brick_cnt >= 2*where_am_i_cnt) as usize)
+                .all(|this_brick| this_brick.deref().borrow().rests_on.len() > 1);
+            acc + ((where_am_i_cnt == 0 || never_only_support) as usize)
         });
 
     println!("Disintegratable: {}", num_disintegratable);
