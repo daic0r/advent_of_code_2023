@@ -44,7 +44,8 @@ impl Extents {
 #[derive(Debug, Clone, Default)]
 struct Brick {
     name: Option<char>,
-    extents: Extents 
+    extents: Extents,
+    rests_on: Vec<usize>
 }
 impl From<&str> for Extents {
     fn from(value: &str) -> Self {
@@ -75,7 +76,8 @@ impl From<&str> for Brick {
     fn from(value: &str) -> Self {
         Self {
             name: None,
-            extents: Extents::from(value)
+            extents: Extents::from(value),
+            rests_on: vec![]
         }
     }
 }
@@ -179,8 +181,9 @@ fn drop_pieces(map: &mut BTreeMap<usize, RefCell<Vec<usize>>>, bricks: &mut Vec<
             let mut intersect = false;
             for &b2 in dst.iter() {
                 if bricks[b2].borrow().intersects(&brick.borrow().lower()) {
+                    brick.borrow_mut().rests_on.push(b2);
                     intersect = true;
-                    break;
+                    //break;
                 }
             }
             if !intersect {
@@ -241,6 +244,16 @@ fn main() {
     drop_pieces(&mut brick_levels, &mut bricks);
 
     print_bricks(&brick_levels, &bricks, ViewDirection::Front);
+    println!();
     print_bricks(&brick_levels, &bricks, ViewDirection::Side);
+
+    println!();
+    for b in &bricks {
+        print!("{} rests on ", b.borrow().name.unwrap());
+        for support in &b.borrow().rests_on {
+            print!("{} ", bricks[*support].borrow().name.unwrap());
+        }
+        println!();
+    }
 
 }
