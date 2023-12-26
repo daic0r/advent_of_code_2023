@@ -3,7 +3,7 @@ struct Vec2(f64, f64);
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Vec3(f64, f64, f64);
 
-const DIVISOR: f64 = 100_000.0;
+const DIVISOR: f64 = 1.0;
 
 impl std::ops::Add for Vec2 {
     type Output = Vec2;
@@ -127,7 +127,7 @@ fn main() {
 
     let mut cnt = 0usize;
     for i in 1..hailstones.len()-1 {
-        for h1 in hailstones.iter().skip(i-1) {
+        let h1 = &hailstones[i-1];
             for h2 in hailstones.iter().skip(i) {
                 // println!("Stone A: {:?}", h1); 
                 // println!("Stone B: {:?}", h2); 
@@ -148,7 +148,6 @@ fn main() {
                     //println!("-> No intersection");
                 }
             }
-        }
     }
     println!();
     println!("{} in test area", cnt);
