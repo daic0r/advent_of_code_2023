@@ -69,7 +69,7 @@ impl Display for Point {
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 struct Vector(isize, isize);
 
-#[derive(Debug, Hash, PartialEq, Eq)]
+#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
 struct Edge(Point, usize);
 
 const OFFSETS: [Vector; 4] = [ Vector(1, 0), Vector(-1, 0), Vector(0, 1), Vector(0, -1)];
@@ -221,11 +221,37 @@ fn read_graph(map: &Map) -> HashMap<Point, HashSet<Edge>> {
         } else {
             let mut set1 = HashSet::new();
             set1.insert(Edge(cur, edge_len));
-            ret.entry(from).and_modify(|v: &mut HashSet<Edge>| { v.insert(Edge(cur.clone(), edge_len)); })
+            ret.entry(from).and_modify(|v: &mut HashSet<Edge>| { 
+                let mut to_rem = None;
+                if let Some(prev_entry) = v.iter().find(|&e| e.0 == cur) {
+                    if edge_len > prev_entry.1 {
+                        to_rem = Some(*prev_entry);
+                    }
+                }
+                let old_len = v.len();
+                if let Some(to_rem) = to_rem {
+                    assert!(v.remove(&to_rem));
+                    assert!(v.len() == old_len-1);
+                }
+                v.insert(Edge(cur.clone(), edge_len)); 
+            })
                 .or_insert(set1);
             let mut set2 = HashSet::new();
             set2.insert(Edge(from, edge_len));
-            ret.entry(cur.clone()).and_modify(|v: &mut HashSet<Edge>| { v.insert(Edge(from, edge_len)); })
+            ret.entry(cur.clone()).and_modify(|v: &mut HashSet<Edge>| { 
+                let mut to_rem = None;
+                if let Some(prev_entry) = v.iter().find(|&e| e.0 == from) {
+                    if edge_len > prev_entry.1 {
+                        to_rem = Some(*prev_entry);
+                    }
+                }
+                let old_len = v.len();
+                if let Some(to_rem) = to_rem {
+                    assert!(v.remove(&to_rem));
+                    assert!(v.len() == old_len-1);
+                }
+                v.insert(Edge(from, edge_len)); 
+            })
                 .or_insert(set2);
             for neigh in &neighs {
                 the_stack.push((neigh.clone(), cur, 1, Some(cur)));
@@ -235,14 +261,26 @@ fn read_graph(map: &Map) -> HashMap<Point, HashSet<Edge>> {
     ret
 }
 
-fn find_path_len(start: &Point, dest: &Point, map: &HashMap<Point, Vec<(Point, usize)>>) -> usize {
-    let mut cur = start;
-    let len = 0usize;
-    while cur != dest {
-        let entry = &map[cur];
-
+fn find_path_len(start: &Point, dest: &Point, graph: &HashMap<Point, HashSet<Edge>>) -> usize {
+    let mut memory: HashMap<Point, usize> = HashMap::new();
+    //memory.insert(*dest, graph[dest].iter().max_by_key(|e| e.1).unwrap().1);
+    let mut the_stack = vec![ dest ];
+    let mut history = HashSet::new();
+    while let Some(cur) = the_stack.pop() {
+        let entry = &graph[&cur];
+        if history.contains(&cur) {
+            continue;
+        }
+        history.insert(cur);
+        for edge in entry {
+            let new_len = edge.1 + memory.get(&cur).unwrap_or(&0usize);
+            if !memory.contains_key(&edge.0) || new_len > memory[&edge.0] {
+                memory.insert(edge.0, new_len);
+                the_stack.push(&edge.0);
+            }
+        }
     }
-    len
+    memory[start]
 }
 
 fn main() {
@@ -260,6 +298,11 @@ fn main() {
         }
         println!();
     }
+
+    let start = Point(map.first().unwrap().iter().position(|&c| c == '.').unwrap(), 0usize);
+    let dest = Point(map.last().unwrap().iter().position(|&c| c == '.').unwrap(), map.len()-1);
+    let path_len = find_path_len(&start, &dest, &graph);
+    println!("Path length: {}", path_len);
 
     // let path = find_path(&map);
     //
