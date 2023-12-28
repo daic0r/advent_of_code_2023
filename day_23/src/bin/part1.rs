@@ -107,9 +107,6 @@ fn get_neighbors(my_node: &Point, prev: Option<&Point>, map: &Map) -> Vec<Point>
             _ => false
         };
         if legal_travel {
-        if my_node == &Point(5, 13) {
-            println!("Considering neighbor: {:?} with legal_travel: {}", neighbor, legal_travel);
-        }
             ret.push(Point(neighbor.0.unwrap(), neighbor.1.unwrap()));
         }
     }
@@ -213,43 +210,23 @@ fn read_graph(map: &Map) -> HashMap<Point, HashSet<Edge>> {
         let (cur, from, edge_len, prev) = the_stack.pop().unwrap();
 
         let neighs = get_neighbors(&cur, prev.as_ref(), &map);
-        if cur == Point(5, 13) {
-            println!("Considering neighbors: {:?}", neighs);
-        }
         if neighs.len() == 1 {
             the_stack.push((neighs.first().unwrap().clone(), from, edge_len + 1, Some(cur)));
         } else {
-            let mut set1 = HashSet::new();
-            set1.insert(Edge(cur, edge_len));
-            ret.entry(from).and_modify(|v: &mut HashSet<Edge>| { 
-                let mut to_rem = None;
-                if let Some(prev_entry) = v.iter().find(|&e| e.0 == cur) {
-                    if edge_len > prev_entry.1 {
-                        to_rem = Some(*prev_entry);
-                    }
-                }
-                let old_len = v.len();
-                if let Some(to_rem) = to_rem {
-                    assert!(v.remove(&to_rem));
-                    assert!(v.len() == old_len-1);
-                }
-                v.insert(Edge(cur.clone(), edge_len)); 
-            })
-                .or_insert(set1);
             let mut set2 = HashSet::new();
             set2.insert(Edge(from, edge_len));
             ret.entry(cur.clone()).and_modify(|v: &mut HashSet<Edge>| { 
-                let mut to_rem = None;
-                if let Some(prev_entry) = v.iter().find(|&e| e.0 == from) {
-                    if edge_len > prev_entry.1 {
-                        to_rem = Some(*prev_entry);
-                    }
-                }
-                let old_len = v.len();
-                if let Some(to_rem) = to_rem {
-                    assert!(v.remove(&to_rem));
-                    assert!(v.len() == old_len-1);
-                }
+                // let mut to_rem = None;
+                // if let Some(prev_entry) = v.iter().find(|&e| e.0 == from) {
+                //     if edge_len > prev_entry.1 {
+                //         to_rem = Some(*prev_entry);
+                //     }
+                // }
+                // let old_len = v.len();
+                // if let Some(to_rem) = to_rem {
+                //     assert!(v.remove(&to_rem));
+                //     assert!(v.len() == old_len-1);
+                // }
                 v.insert(Edge(from, edge_len)); 
             })
                 .or_insert(set2);
@@ -261,30 +238,46 @@ fn read_graph(map: &Map) -> HashMap<Point, HashSet<Edge>> {
     ret
 }
 
+#[derive(Debug, Clone)]
+struct Path {
+    path: Vec<Point>,
+    len: usize
+}
+
 fn find_path_len(start: &Point, dest: &Point, graph: &HashMap<Point, HashSet<Edge>>) -> usize {
-    let mut memory: HashMap<Point, usize> = HashMap::new();
-    //memory.insert(*dest, graph[dest].iter().max_by_key(|e| e.1).unwrap().1);
-    let mut the_stack = vec![ dest ];
-    let mut history = HashSet::new();
+    let mut the_stack = vec![ Path { path: vec![*dest], len: 0 }];
+    let mut memory: HashMap<Point, Path> = HashMap::new();
     while let Some(cur) = the_stack.pop() {
-        let entry = &graph[&cur];
-        if history.contains(&cur) {
+        let head = *cur.path.last().unwrap();
+        // Start node won't have an entry
+        if !graph.contains_key(&head) {
             continue;
         }
-        history.insert(cur);
+        let entry = &graph[&head];
+        println!("Now at {:?}", cur);
+
         for edge in entry {
-            let new_len = edge.1 + memory.get(&cur).unwrap_or(&0usize);
-            if !memory.contains_key(&edge.0) || new_len > memory[&edge.0] {
-                memory.insert(edge.0, new_len);
-                the_stack.push(&edge.0);
+            // if cur.path.contains(&edge.0) {
+            //     continue;
+            // }
+            let mut tmp = cur.clone();
+            tmp.path.push(edge.0);
+            tmp.len += edge.1;
+            if !memory.contains_key(&edge.0) || tmp.len > memory.get(&edge.0).unwrap().len {
+                if memory.contains_key(&edge.0) {
+                    println!("Replacing {:?} with {:?}", memory.get(&edge.0).unwrap(), tmp);
+                }
+                memory.insert(edge.0, tmp.clone());
+                the_stack.push(tmp);
             }
         }
+        println!("-------------------");
     }
-    memory[start]
+    memory[start].len
 }
 
 fn main() {
-    let map = include_str!("../../input2.txt")
+    let map = include_str!("../../input.txt")
         .lines()
         .map(|l| l.chars().collect::<Vec<char>>())
         .collect::<Vec<Vec<char>>>();
