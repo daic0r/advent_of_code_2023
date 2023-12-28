@@ -1,5 +1,3 @@
-use priority_queue::PriorityQueue;
-use std::cmp::Reverse;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 use std::hash::Hash;
@@ -9,7 +7,6 @@ use core::fmt::Formatter;
 struct Node {
     coord: Point,
     // for debugging
-    symbol: Option<char>,
     prev: Option<Point>
 }
 
@@ -26,16 +23,6 @@ impl Hash for Node {
 
 impl Eq for Node {}
 
-impl Node {
-    fn new(coord: &Point) -> Self {
-        Self {
-            coord: coord.clone(),
-            symbol: None,
-            prev: None
-        }
-    }
-}
-
 impl Display for Node {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "Node({})", self.coord)
@@ -47,11 +34,6 @@ type Map = Vec<Vec<char>>;
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 struct Point(usize, usize);
 
-impl Point {
-    fn sub(&self, other: &Self) -> Vector {
-        Vector(self.0 as isize - other.0 as isize, self.1 as isize - other.1 as isize)
-    }
-}
 impl std::ops::Sub for Point {
     type Output = Vector;
 
@@ -113,96 +95,9 @@ fn get_neighbors(my_node: &Point, prev: Option<&Point>, map: &Map) -> Vec<Point>
     ret
 }
 
-// fn find_path(map: &Map) -> Option<Vec<Node>> {
-//     let mut prevoius = HashSet::new();
-//
-//     let start = Point(map.first().unwrap().iter().position(|&c| c == '.').unwrap(), 0usize);
-//     let dest = Point(map.last().unwrap().iter().position(|&c| c == '.').unwrap(), map.len()-1);
-//     let h = |coord: &Point| (std::cmp::max(coord.0, dest.0) - std::cmp::min(coord.0, dest.0)) + (std::cmp::max(coord.1, dest.1) - std::cmp::min(coord.1, dest.1));
-//
-//     println!("Start: {:?}", start);
-//     println!("Dest: {:?}", dest);
-//
-//     let mut g_costs: HashMap<Node, usize> = HashMap::new();
-//     let mut f_costs: HashMap<Node, usize> = HashMap::new();
-//     let mut came_from: HashMap<Node, Node> = HashMap::new();
-//
-//     g_costs.insert(Node::new(&start), 0);
-//     f_costs.insert(Node::new(&start),  h(&start));
-//
-//     let mut open_set = PriorityQueue::new();
-//     open_set.push(Node::new(&start), h(&start));
-//
-//     let mut ret = vec![];
-//
-//     while !open_set.is_empty() {
-//         let current = open_set.pop().unwrap().0;
-//         if cfg!(feature="debug_output") {
-//             println!("({},{})", current.coord.0, current.coord.1);
-//         }
-//         // Arrived at destination
-//         if current.coord == dest {
-//             let mut tmp_ret = vec![ current.clone() ];
-//             let mut cur = &current;
-//             while let Some(tmp) = came_from.get(cur) {
-//                 if tmp.coord != start {
-//                     tmp_ret.push(tmp.clone());
-//                 }
-//                 cur = tmp;
-//             }
-//             if tmp_ret.len() > ret.len() {
-//                 ret = tmp_ret;
-//             }
-//         }
-//
-//         // Process neighbors
-//         for mut neighbor in get_neighbors(&current, &map, &mut prevoius) {
-//             let tentative_g_cost = *g_costs.get(&current).unwrap();
-//             if cfg!(feature="debug_output") {
-//                 print!("g: {}", tentative_g_cost);
-//             }
-//
-//             if tentative_g_cost < *g_costs.get(&neighbor).unwrap_or(&usize::MAX) {
-//             //if !g_costs.contains_key(&neighbor) {
-//                 if current.coord == Point(11, 4) {
-//                     println!("Considering neighbor: {:?}", neighbor);
-//                 }
-//                 let dir_to_neighbor = neighbor.coord.sub(&current.coord);
-//                 neighbor.symbol = match dir_to_neighbor {
-//                     Vector(-1, 0) => Some('<'),
-//                     Vector(0, -1) => Some('^'),
-//                     Vector(1, 0) => Some('>'),
-//                     Vector(0, 1) => Some('v'),
-//                     _ => panic!("Shouldn't happen")
-//                 };
-//                 g_costs.insert(neighbor.clone(), tentative_g_cost);
-//                 f_costs.insert(neighbor.clone(), tentative_g_cost + h(&neighbor.coord));
-//                 came_from.insert(neighbor.clone(), current.clone());
-//                 //if cfg!(feature="debug_output") {
-//                 if current.coord == Point(11, 3) {
-//                     println!("f of {}: {}", neighbor, f_costs[&neighbor]);
-//                     //println!("CHOSE: {:?} with edge weight {}", neighbor, map[neighbor.1][neighbor.0].to_digit(10).unwrap());
-//                 }
-//                 //}
-//                 //if !open_set.iter().any(|p| *p.0 == neighbor) {
-//                     open_set.push(neighbor.clone(), f_costs[&neighbor]);
-//                     prevoius.insert(neighbor.coord);
-//                 //}
-//             } else {
-//                 if cfg!(feature="debug_output") {
-//                     println!(" >= {}, ", g_costs[&neighbor]);
-//                     //println!("CHOSE: {:?} with edge weight {}", neighbor, map[neighbor.1][neighbor.0].to_digit(10).unwrap());
-//                 }
-//             }
-//         }
-//     }
-//     Some(ret)
-// }
-
 fn read_graph(map: &Map) -> HashMap<Point, HashSet<Edge>> {
     let mut ret = HashMap::new();
     let start = Point(map.first().unwrap().iter().position(|&c| c == '.').unwrap(), 0usize);
-    let dest = Point(map.last().unwrap().iter().position(|&c| c == '.').unwrap(), map.len()-1);
 
     // cur point, from node, edge length, previous point
     let mut the_stack: Vec<(Point, Point, usize, Option<Point>)> = vec![ (start.clone(), start, 0, None) ];
@@ -296,27 +191,5 @@ fn main() {
     let dest = Point(map.last().unwrap().iter().position(|&c| c == '.').unwrap(), map.len()-1);
     let path_len = find_path_len(&start, &dest, &graph);
     println!("Path length: {}", path_len);
-
-    // let path = find_path(&map);
-    //
-    // if path.is_none() {
-    //     println!("No path found");
-    // } else if let Some(path) = path {
-    //     for p in &path {
-    //         println!("{:?}", p.coord);
-    //     }
-    //     for (row_idx,row) in map.iter().enumerate() {
-    //         for (col_idx,col) in row.iter().enumerate() {
-    //             if let Some(node) = path.iter().find(|p| p.coord == Point(col_idx,row_idx)) {
-    //                 //print!("{}", node.symbol.unwrap());
-    //                 print!("O");
-    //             } else {
-    //                 print!("{}", map[row_idx][col_idx]);
-    //             }
-    //         }
-    //         println!();
-    //     }
-    //     println!("Length of path: {}", path.len());
-    // }
 
 }
