@@ -41,7 +41,7 @@ impl<'a> VertexGroup<'a> {
     }
 }
 
-fn merge_nodes(node1: &str, node2: &str, mut graph: &mut Graph) {
+fn merge_nodes(node1: &str, node2: &str, graph: &mut Graph) {
     let mut edges1 = std::mem::take(graph.get_mut(node1).unwrap());
     let mut edges2 = std::mem::take(graph.get_mut(node2).unwrap());
     edges1.retain(|s,_| *s != node2);
@@ -49,13 +49,27 @@ fn merge_nodes(node1: &str, node2: &str, mut graph: &mut Graph) {
     edges2.iter().for_each(|(s,w)| {
         edges1.entry(s.clone()).and_modify(|this_w| *this_w += *w).or_insert(*w);
     });
-    graph.insert(format!("{}{}", node1, node2), edges1);
+    let compound_name = format!("{},{}", node1, node2);
+    graph.insert(compound_name.clone(), edges1);
     graph.remove(node1);
     graph.remove(node2);
+    let keys = graph.keys().map(|k| k.clone()).collect::<Vec<_>>();
+    for key in keys {
+        graph.entry(key.clone()).and_modify(|edges| {
+            if edges.contains_key(node1) || edges.contains_key(node2) {
+                let w1 = edges.get(node1).unwrap_or(&0);
+                let w2 = edges.get(node2).unwrap_or(&0);
+                edges.insert(compound_name.clone(), w1+w2);
+                edges.remove(node1);
+                edges.remove(node2);
+            }
+        });
+    }
 }
 
 fn stoer_wagner(graph: &Graph) {
     let mut graph = graph.clone();
+    let mut cuts = vec![];
     loop {
         let len = graph.len();
         if len == 1 {
@@ -63,18 +77,32 @@ fn stoer_wagner(graph: &Graph) {
         }
         let mut last_insert: Option<&str> = None;
         let mut second_to_last_insert: Option<&str> = None;
+        let mut last_weight: Option<usize> = None;
         let tmp = graph.clone();
         let mut vg = VertexGroup::new(&tmp);
         while vg.vertices.len() < tmp.len() {
-            let external_edges = vg.edges();
+            let external_edges = if !vg.edges().is_empty() {
+                vg.edges()
+            } else {
+                let mut ret = HashMap::new();
+                ret.insert(tmp.iter().nth(0).unwrap().0.as_str(), 0usize);
+                ret
+            };
             let max_edge = external_edges.iter().max_by_key(|(_,w)| *w);
             println!("Adding {}, weight {}", *max_edge.unwrap().0, *max_edge.unwrap().1);
             vg.vertices.insert(*max_edge.unwrap().0);
             second_to_last_insert = last_insert;
             last_insert = Some(*max_edge.unwrap().0);
+            last_weight = Some(*max_edge.unwrap().1);
         }
+        println!("{:?} and {:?}", last_insert.unwrap(),  second_to_last_insert.unwrap());
+        cuts.push((graph.clone(), last_weight.unwrap(), last_insert.unwrap().to_string(), second_to_last_insert.unwrap().to_string()));
         merge_nodes(&last_insert.unwrap(), &second_to_last_insert.unwrap(), &mut graph);
+        println!("{:?}", graph);
+        println!("---------------------------------------------");
     }
+    println!("CUTS:");
+    println!("{:?}", cuts.iter().min_by_key(|kvp| kvp.1).unwrap());
 }
 
 fn main() {
@@ -110,11 +138,6 @@ fn main() {
     vg.vertices.insert("bvb");
 
     println!("{:?}", adj_list);
-    println!("{:?}", vg.edges());
-    merge_nodes("bvb", "rhn", &mut adj_list);
-    println!();
-    println!("{:?}", adj_list);
-    //println!("{:?}", vg.external_nodes());
     stoer_wagner(&adj_list);
 
 
