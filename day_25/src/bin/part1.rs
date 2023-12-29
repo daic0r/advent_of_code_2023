@@ -67,18 +67,19 @@ fn merge_nodes(node1: &str, node2: &str, graph: &mut Graph) {
     }
 }
 
-fn stoer_wagner(graph: &Graph) {
-    let mut graph = graph.clone();
+fn stoer_wagner(graph: &Graph) -> (Vec<String>, Vec<String>) {
+    let mut graph_copy = graph.clone();
     let mut cuts = vec![];
+    let mut idx = 0;
     loop {
-        let len = graph.len();
+        let len = graph_copy.len();
         if len == 1 {
             break;
         }
         let mut last_insert: Option<&str> = None;
         let mut second_to_last_insert: Option<&str> = None;
         let mut last_weight: Option<usize> = None;
-        let tmp = graph.clone();
+        let tmp = graph_copy.clone();
         let mut vg = VertexGroup::new(&tmp);
         while vg.vertices.len() < tmp.len() {
             let external_edges = if !vg.edges().is_empty() {
@@ -90,19 +91,24 @@ fn stoer_wagner(graph: &Graph) {
             };
             let max_edge = external_edges.iter().max_by_key(|(_,w)| *w);
             println!("Adding {}, weight {}", *max_edge.unwrap().0, *max_edge.unwrap().1);
-            vg.vertices.insert(*max_edge.unwrap().0);
             second_to_last_insert = last_insert;
             last_insert = Some(*max_edge.unwrap().0);
             last_weight = Some(*max_edge.unwrap().1);
+            vg.vertices.insert(*max_edge.unwrap().0);
         }
         println!("{:?} and {:?}", last_insert.unwrap(),  second_to_last_insert.unwrap());
-        cuts.push((graph.clone(), last_weight.unwrap(), last_insert.unwrap().to_string(), second_to_last_insert.unwrap().to_string()));
-        merge_nodes(&last_insert.unwrap(), &second_to_last_insert.unwrap(), &mut graph);
-        println!("{:?}", graph);
+        cuts.push((graph_copy.clone(), last_weight.unwrap(), last_insert.unwrap().to_string(), second_to_last_insert.unwrap().to_string(), idx));
+        merge_nodes(&last_insert.unwrap(), &second_to_last_insert.unwrap(), &mut graph_copy);
+        println!("{:?}", graph_copy);
         println!("---------------------------------------------");
+        idx += 1;
     }
-    println!("CUTS:");
-    println!("{:?}", cuts.iter().min_by_key(|kvp| kvp.1).unwrap());
+    let min_cut = cuts.iter().min_by_key(|kvp| kvp.1).unwrap();
+    let mut vg = VertexGroup::new(&graph); 
+    for sp in min_cut.2.split(",") {
+        vg.vertices.insert(sp);
+    }
+    (vg.edges().keys().map(|s| s.to_string()).collect(), vg.external_nodes().iter().map(|s| s.to_string()).collect())
 }
 
 fn main() {
@@ -138,7 +144,6 @@ fn main() {
     vg.vertices.insert("bvb");
 
     println!("{:?}", adj_list);
-    stoer_wagner(&adj_list);
-
-
+    let two_sets = stoer_wagner(&adj_list);
+    println!("Separated sets: {:?}", two_sets);
 }
